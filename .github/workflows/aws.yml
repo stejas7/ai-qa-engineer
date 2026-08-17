@@ -31,4 +31,4 @@ jobs:
             echo "Checking deployment..."
             sudo docker compose ps
 
-            echo "Deployment completed."
+            echo "Deployment completed successfully."
