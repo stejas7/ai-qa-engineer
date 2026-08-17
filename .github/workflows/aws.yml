@@ -70,6 +70,20 @@ jobs:
           git reset --hard origin/main
           echo "==> Source synchronized"
 
+          echo "==> Docker disk usage before cleanup"
+          sudo docker system df || true
+          df -h / || true
+
+          echo "==> Safely cleaning unused Docker build/cache data"
+          # Removes stopped containers, unused networks, dangling images,
+          # and unused build cache. Docker volumes are deliberately preserved.
+          timeout 120 sudo docker system prune -af
+          timeout 120 sudo docker builder prune -af || true
+
+          echo "==> Docker disk usage after cleanup"
+          sudo docker system df || true
+          df -h / || true
+
           echo "==> Building and starting containers..."
           timeout 300 sudo docker compose up -d --build --remove-orphans
           echo "==> Containers started"
