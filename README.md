@@ -1,136 +1,148 @@
 # AI QA Engineer — Agentic Java + GenAI Platform
 
-A build-first reference implementation for exploring how **Java, Spring Boot, GenAI and AI Agents** can be combined into an enterprise automation platform.
+A build-first reference implementation for combining **Java, Spring Boot, GenAI and AI Agents** into an enterprise automation platform.
 
 ## Vision
 
-The goal is to evolve from a requirement-aware assistant into a production-oriented **agentic engineering platform** that can understand business requirements, plan work, use tools, execute actions, analyze outcomes and safely improve its own automation.
-
-## Efficient Architecture
-
-```text
-User / Business Requirement
-          ↓
-   Agent Orchestrator
-          ↓
-   AgentRun / AgentStep
-          ↓
-Requirement → Test Design → Automation → Execution → Analysis
-          ↓
-       Tool Gateway
-   Browser • Git • APIs • DB • CI/CD • Cloud
-          ↓
-   Evidence + Audit State
-```
-
-### Architecture principles
-
-- **Orchestrator-first:** agents are specialized workers; orchestration owns workflow state and routing.
-- **Tool isolation:** agents access external systems through controlled tool contracts rather than unrestricted access.
-- **Structured outputs:** typed request/response models and machine-readable agent results.
-- **Deterministic execution:** LLMs plan/reason; deterministic tools perform actions.
-- **Evidence-first:** execution produces auditable steps and results.
-- **Safe autonomy:** future destructive actions can require approval before execution.
-- **Provider-neutral:** LLM integration remains replaceable.
-
-## Current Flow
+Evolve from a requirement-aware assistant into a production-oriented **agentic engineering platform** that understands requirements, plans work, uses controlled tools, executes actions, analyzes outcomes and safely improves automation.
 
 ```text
 Business Requirement
         ↓
-AI Requirement Analysis
+Agent Orchestrator → AgentRun / AgentStep
         ↓
-AI Test Design
+Requirement → Test Design → Automation → Execution → Analysis
         ↓
-Playwright Automation Generation
+Policy Engine → Human Approval → Tool Execution
         ↓
-UAT Execution
+Evidence + Audit
         ↓
-Evidence
-        ↓
-AI Failure Analysis
+Quality Gate → CI/CD Decision
 ```
 
-## Versioned Roadmap — V1 → V10
+## Architecture principles
+
+- Orchestrator-first: specialized agents, centralized workflow state.
+- Tool isolation: external systems are accessed through controlled contracts.
+- Structured outputs: typed request/response models and machine-readable results.
+- Deterministic execution: LLMs plan/reason; deterministic tools perform actions.
+- Evidence-first: execution produces auditable steps and results.
+- Safe autonomy: sensitive/destructive actions can require human approval.
+- Provider-neutral: LLM integration remains replaceable.
+
+## Versioned Roadmap — V1 → V11
 
 | Version | Capability | Outcome |
 |---|---|---|
-| **V1** | Requirement Analysis Agent | Convert business requirements into structured scenarios and persist them. |
-| **V2** | Test Design Agent | Generate detailed functional, negative, boundary and traceability test cases. |
-| **V3** | Automation Generation Agent | Convert test cases into Java + Playwright automation. |
-| **V4** | Autonomous UAT Execution | Execute generated tests against a demo UAT application and collect evidence. |
-| **V5** | AI Failure Analysis | Analyze failures, classify probable root cause and recommend next action. |
-| **V6** | Safe Self-Healing Agent | Detect broken locators/automation, generate candidate fixes, validate them and support approval-based retry. |
-| **V7** | RAG + Enterprise Knowledge | Add pgvector/RAG for requirements, standards, historical defects, test knowledge and reusable patterns. |
-| **V8** | Multi-Agent + Tool Orchestration | Coordinate specialized agents through persisted AgentRuns/AgentSteps and controlled tool contracts. |
-| **V9** | Autonomous CI/CD + Cloud | Trigger pipelines, execute regression suites, publish evidence and integrate cloud deployment. |
-| **V10** | Production-Ready Agentic Engineering Platform | Secure, observable, policy-controlled multi-agent platform with human-in-the-loop governance. |
+| V1 | Requirement Analysis Agent | Structured scenarios from business requirements. |
+| V2 | Test Design Agent | Functional, negative, boundary and traceability tests. |
+| V3 | Automation Generation Agent | Java + Playwright automation generation. |
+| V4 | Autonomous UAT Execution | Real Playwright execution and evidence. |
+| V5 | AI Failure Analysis | Root-cause classification and next-action recommendation. |
+| V6 | Safe Self-Healing Agent | Candidate locator/automation fixes with validation and approval. |
+| V7 | RAG + Enterprise Knowledge | pgvector/RAG for requirements, standards and historical QA knowledge. |
+| V8 | Multi-Agent + Tool Orchestration | Persisted AgentRuns/AgentSteps and controlled tool contracts. |
+| V9 | Autonomous CI/CD + Cloud | CI/CD, regression, evidence and cloud deployment. **Deployed baseline.** |
+| V10 | Production Agent Governance | Policy evaluation, sensitive-action approval and governance APIs. |
+| V11 | Autonomous Quality Gate | APPROVED/BLOCKED decision from UAT results and requirement coverage. |
+
+## V9 — Deployed Baseline
+
+V9 is the deployment foundation for V10/V11. GitHub Actions deploys to AWS EC2 using Docker Compose, performs safe Docker recovery/cleanup, starts the services and validates `/actuator/health` before declaring deployment successful.
+
+Current HTTPS UAT environment:
+
+`https://tejas-aiqa.duckdns.org`
+
+## V10 — Production Agent Governance
+
+V10 introduces a deterministic policy boundary between agent reasoning and external actions.
+
+### Policy API
+
+`POST /api/governance/policy/evaluate`
+
+Example:
+
+```json
+{"action":"DEPLOY","tool":"CI_CD","environment":"PRODUCTION"}
+```
+
+Decisions:
+
+- `ALLOW` — deterministic action permitted.
+- `APPROVAL_REQUIRED` — sensitive action needs human approval.
+- `DENY` — no policy permits the action.
+
+UAT Playwright execution and failure analysis are allowed by default. Production deployment and sensitive tools such as shell/SSH/secrets require approval.
+
+### Human approval APIs
+
+- `POST /api/governance/approvals`
+- `GET /api/governance/approvals/pending`
+- `GET /api/governance/runs/{runId}/approvals`
+- `POST /api/governance/approvals/{approvalId}/decision`
+
+Approval requests are persisted in `agent_approvals` and can be linked to an `AgentRun`.
+
+## V11 — Autonomous Quality Gate
+
+V11 introduces a deterministic quality gate that converts UAT evidence into a deployment decision.
+
+`POST /api/quality-gate/evaluate`
+
+Example:
+
+```json
+{"totalTests":10,"passedTests":10,"failedTests":0,"automatedTests":10,"requirements":4,"coveredRequirements":4}
+```
+
+A clean run with full requirement coverage returns `APPROVED`. Any failed test or incomplete requirement coverage returns `BLOCKED`.
+
+The next V11 increments will connect this gate to persisted execution results, AI failure classification, self-healing validation and the V9 CI/CD workflow.
 
 ## Current Implementation
 
-### V1 — Requirement Agent
-Business Requirement → AI Requirement Analysis → structured test scenarios → PostgreSQL → dashboard.
+### V1
+Business Requirement → AI Requirement Analysis → structured scenarios → PostgreSQL → dashboard.
 
-### V2 — Test Design Agent
-Business Requirement → AI Requirement Analysis → detailed executable test cases.
+### V2
+Business Requirement → AI Requirement Analysis → executable test cases.
 
-### V3 — Playwright Automation Agent
+### V3
 Test case → automation request → generated Java + Playwright test skeleton.
 
-### V4 — UAT Execution Agent
-V4 adds a deliberately simple demo UAT login application and real Playwright execution.
+### V4
+Demo UAT login application and real Playwright execution.
 
 - Demo UAT: `/uat/`
 - Execution dashboard: `/v4.html`
 - API: `POST /api/execution/run`
-- Captures execution duration and screenshot evidence
 
-### V5 — Failure Analysis Agent
-V5 analyzes failed V4 executions.
+### V5
+Failure analysis dashboard/API with deterministic fallback and optional OpenAI Responses API analysis.
 
-- Dashboard: `/v5.html`
-- API: `POST /api/failure-analysis/analyze`
-- Deterministic fallback works without an AI key
-- Optional OpenAI Responses API analysis when `OPENAI_API_KEY` is configured
-- Classifies probable failure root cause and recommends retry or investigation
-
-### V8 — Multi-Agent Orchestration
-V8 turns the earlier agent UI into a real persisted orchestration flow.
+### V8
+Persisted multi-agent orchestration:
 
 - Dashboard: `/v8.html`
-- `AgentRun` persists lifecycle state: CREATED → RUNNING → COMPLETED/FAILED
-- `AgentStep` persists ordered execution steps and outputs
-- `AgentOrchestrator` owns run/step lifecycle and state
-- Controlled `AgentTool` / `AgentToolResult` contract introduced for tool isolation
-- Real pipeline: **Requirement Agent → Test Design Agent → Automation Agent**
+- `AgentRun`: CREATED → RUNNING → COMPLETED/FAILED
+- `AgentStep`: ordered execution steps and outputs
+- `AgentOrchestrator`: run/step lifecycle
+- `AgentTool` / `AgentToolResult`: controlled tool contract
+- Pipeline: Requirement → Test Design → Automation
 - API: `POST /api/agents/pipeline`
-- Existing V1–V3 services are invoked by the orchestrator rather than duplicated
-- Pipeline result exposes run ID, scenario count, test-case count and generated automation artifacts
 
 ## Technology Stack
 
-- **Java 21**
-- **Spring Boot 3.5.3**
-- **Maven**
-- **PostgreSQL 16**
-- **Playwright for Java 1.52.0**
-- **OpenAI Responses API**
-- **Docker / Docker Compose**
-- **GitHub Actions**
-- Planned: **pgvector, RAG, MCP/tool integrations, cloud observability and V9 autonomous execution**
-
-## Run in GitHub Codespaces
-
-```bash
-git checkout main
-git pull origin main
-docker compose up -d postgres
-mvn clean verify
-mvn -pl ai-qa-api exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
-mvn spring-boot:run -pl ai-qa-api
-```
-
-Then open `/v8.html` for the V8 Agent Control Center.
+- Java 21
+- Spring Boot 3.5.3
+- Maven
+- PostgreSQL 16
+- Playwright for Java 1.52.0
+- OpenAI Responses API
+- Docker / Docker Compose
+- GitHub Actions
 
 ## APIs
 
@@ -152,8 +164,20 @@ Then open `/v8.html` for the V8 Agent Control Center.
 
 `GET /api/agents/runs/{id}/steps`
 
+### V10
+`POST /api/governance/policy/evaluate`
+
+`POST /api/governance/approvals`
+
+`GET /api/governance/approvals/pending`
+
+`GET /api/governance/runs/{runId}/approvals`
+
+`POST /api/governance/approvals/{approvalId}/decision`
+
+### V11
+`POST /api/quality-gate/evaluate`
+
 ## Project Direction
 
-This repository is intentionally developed incrementally. V1–V5 establish the requirement → design → automation → execution → analysis loop. V8 adds real multi-agent orchestration and controlled tool contracts. V9 will extend this into autonomous CI/CD and cloud execution.
-
-The long-term objective is not simply an AI chatbot. It is a **controlled agentic engineering system** where AI handles planning and reasoning while deterministic tools execute actions with auditable evidence and human governance.
+V9 is the deployed AWS/CI/CD foundation. V10 adds governance and safe autonomy. V11 adds the quality gate that becomes the decision point for autonomous CI/CD. The long-term objective is a **controlled agentic engineering system** where AI handles planning/reasoning while deterministic tools execute actions with auditable evidence and human governance.
