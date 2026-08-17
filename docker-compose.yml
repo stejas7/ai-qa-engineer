@@ -2,6 +2,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: ai-qa-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: aiqa
       POSTGRES_USER: aiqa
@@ -20,6 +21,7 @@ services:
   ai-qa-api:
     image: ${AI_QA_IMAGE:-ghcr.io/stejas7/ai-qa-engineer:latest}
     container_name: ai-qa-api
+    restart: unless-stopped
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/aiqa
       DB_USER: aiqa
