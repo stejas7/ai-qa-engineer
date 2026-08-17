@@ -1,9 +1,10 @@
 name: Deploy AI QA Engineer to AWS EC2
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["AI QA Engineer Build"]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: production-deploy
@@ -15,17 +16,19 @@ env:
 jobs:
   deploy:
     name: Deploy to EC2
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 12
 
     steps:
-      - name: Checkout source for V12 impact analysis
+      - name: Checkout tested commit for V12 impact analysis
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2
 
-      - name: Diagnose and deploy to EC2
-        timeout-minutes: 8
+      - name: Deploy to EC2
+        timeout-minutes: 7
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
@@ -38,17 +41,9 @@ jobs:
           trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
 
           echo "==> Target: $EC2_HOST"
-          echo "==> Checking TCP port 22..."
-          if ! timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'; then
-            echo "ERROR: EC2 port 22 is unreachable from GitHub Actions."
-            echo "Check EC2 instance state, public IP, Security Group inbound TCP/22, NACL and sshd."
-            exit 1
-          fi
-          echo "==> TCP port 22 is reachable"
+          timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'
 
-          echo "==> Checking SSH banner..."
           timeout 30 ssh \
-            -vv \
             -o BatchMode=yes \
             -o ConnectTimeout=15 \
             -o ConnectionAttempts=1 \
@@ -58,8 +53,7 @@ jobs:
             -i "$RUNNER_TEMP/ec2_key" \
             "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
 
-          echo "==> Starting remote deployment..."
-          timeout 7m ssh \
+          timeout 6m ssh \
             -T \
             -o BatchMode=yes \
             -o ConnectTimeout=15 \
@@ -72,81 +66,43 @@ jobs:
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
 
-          echo "==> Remote shell started"
-          echo "==> Syncing latest main..."
+          echo "==> Syncing tested main commit"
           timeout 60 git fetch --prune origin main
           git reset --hard origin/main
-          echo "==> Source synchronized"
 
-          echo "==> Docker daemon status before recovery"
-          sudo systemctl is-active docker || true
-          sudo docker info --format 'Docker={{.ServerVersion}} Storage={{.Driver}}' || true
-
-          echo "==> Stopping this application's containers before cleanup"
-          # Keep named volumes: PostgreSQL data must survive deployments.
-          sudo docker compose down --remove-orphans || true
-
-          echo "==> Restarting Docker to recover containerd state"
-          sudo systemctl restart docker
-          timeout 60 bash -c 'until sudo docker info >/dev/null 2>&1; do sleep 2; done'
-          echo "==> Docker daemon is ready"
-
-          echo "==> Disk usage before cleanup"
+          echo "==> Current disk"
           df -h /
-          sudo du -xhd1 /var/lib/docker 2>/dev/null | sort -h | tail -20 || true
 
-          echo "==> Cleaning OS package and journal caches"
-          sudo apt-get clean || true
-          sudo journalctl --vacuum-size=100M || true
-          sudo rm -rf /tmp/* /var/tmp/* || true
-
-          echo "==> Cleaning unused Docker containers, images and networks"
-          # Volumes are deliberately NOT pruned; postgres_data is persistent application data.
-          timeout 180 sudo docker system prune -af --filter 'until=24h' || true
-          timeout 180 sudo docker image prune -af || true
-          timeout 180 sudo docker builder prune -af || true
-
-          echo "==> Docker disk usage after cleanup"
-          sudo docker system df || true
-          df -h /
+          # Normal deployments keep Docker/build cache warm. Cleanup is only
+          # performed when the root filesystem crosses the safety threshold.
+          available_kb="$(df --output=avail / | tail -1 | tr -d ' ')"
+          if [ "$available_kb" -lt 8388608 ]; then
+            echo "==> Low disk detected; performing emergency Docker cleanup"
+            sudo docker compose down --remove-orphans || true
+            sudo apt-get clean || true
+            sudo journalctl --vacuum-size=100M || true
+            timeout 180 sudo docker system prune -af --filter 'until=24h' || true
+            timeout 180 sudo docker builder prune -af || true
+          else
+            echo "==> Disk healthy; preserving Docker/build cache"
+          fi
 
           available_kb="$(df --output=avail / | tail -1 | tr -d ' ')"
           available_gb=$((available_kb / 1024 / 1024))
           echo "==> Available root filesystem: ${available_gb}GB"
-
-          # The official Playwright Java image is intentionally large because it contains
-          # Chromium and native browser dependencies. Fail early with a useful message
-          # instead of allowing containerd to fail halfway through a multi-GB layer write.
           if [ "$available_kb" -lt 4194304 ]; then
-            echo "ERROR: Less than 4GB free on / after Docker cleanup."
-            echo "The Playwright runtime image requires several GB of temporary build/storage space."
-            echo "Increase the EC2 root EBS volume and retry the deployment."
+            echo "ERROR: Less than 4GB free on /"
             exit 1
           fi
 
-          echo "==> Pulling images before deployment"
-          if ! timeout 180 sudo docker compose pull; then
-            echo "==> Initial image pull failed; restarting Docker once and retrying"
-            sudo systemctl restart docker
-            timeout 60 bash -c 'until sudo docker info >/dev/null 2>&1; do sleep 2; done'
-            timeout 180 sudo docker compose pull
-          fi
+          echo "==> Building and starting application"
+          # Keep the local Docker cache between deployments. This avoids
+          # re-downloading the large Playwright runtime on every commit.
+          timeout 300 sudo docker compose up -d --build --remove-orphans
 
-          echo "==> Building and starting containers..."
-          if ! timeout 300 sudo docker compose up -d --build --remove-orphans; then
-            echo "==> Docker build/start failed; collecting disk and Docker diagnostics"
-            df -h / || true
-            sudo docker system df || true
-            sudo du -xhd1 /var/lib/docker 2>/dev/null | sort -h | tail -20 || true
-            sudo docker compose ps -a || true
-            exit 1
-          fi
-          echo "==> Containers started"
-
-          echo "==> Waiting for application health..."
+          echo "==> Waiting for application health"
           healthy=false
-          for i in $(seq 1 30); do
-            echo "==> Health check $i/30"
+          for i in $(seq 1 20); do
             if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
               healthy=true
               break
@@ -155,7 +111,6 @@ jobs:
           done
 
           if [ "$healthy" = true ]; then
-            echo "==> Application is healthy"
             cat /tmp/health.json
             sudo docker compose ps
             exit 0
@@ -164,18 +119,15 @@ jobs:
           echo "==> Deployment failed: health check did not pass"
           sudo docker compose ps -a || true
           timeout 30 sudo docker compose logs --tail=150 ai-qa-api || true
-          timeout 30 sudo docker compose logs --tail=80 || true
           exit 1
           REMOTE_SCRIPT
 
       - name: V12 change impact analysis
-        timeout-minutes: 2
+        timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-
           base="$(git rev-parse HEAD^ 2>/dev/null || true)"
           if [ -z "$base" ]; then
-            echo "No parent commit available; recommending full regression."
             changed_files='["repository-baseline"]'
             diff_text="initial repository baseline"
           else
@@ -183,128 +135,61 @@ jobs:
             diff_text="$(git diff --unified=0 "$base" HEAD)"
           fi
 
-          echo "==> Changed files: $changed_files"
-
-          payload="$(jq -n \
-            --argjson changedFiles "$changed_files" \
-            --arg diff "$diff_text" \
-            '{changedFiles:$changedFiles,diff:$diff}')"
-
-          response="$(curl --connect-timeout 10 --max-time 30 -fsS \
-            -X POST "$UAT_BASE_URL/api/impact-analysis/analyze" \
-            -H 'Content-Type: application/json' \
-            --data "$payload")"
-
+          payload="$(jq -n --argjson changedFiles "$changed_files" --arg diff "$diff_text" '{changedFiles:$changedFiles,diff:$diff}')"
+          response="$(curl --connect-timeout 5 --max-time 20 -fsS -X POST "$UAT_BASE_URL/api/impact-analysis/analyze" -H 'Content-Type: application/json' --data "$payload")"
           echo "$response" | jq .
-          echo "$response" > "$RUNNER_TEMP/impact-analysis.json"
 
           risk="$(echo "$response" | jq -r '.risk // "UNKNOWN"')"
           score="$(echo "$response" | jq -r '.score // 100')"
           full_regression="$(echo "$response" | jq -r '.fullRegressionRecommended // true')"
           suites="$(echo "$response" | jq -r '(.recommendedSuites // []) | join(",")')"
-
           echo "==> V12 impact risk: $risk (score=$score)"
           echo "==> Recommended suites: $suites"
           echo "==> Full regression recommended: $full_regression"
-
           echo "V12_IMPACT_RISK=$risk" >> "$GITHUB_ENV"
           echo "V12_IMPACT_SCORE=$score" >> "$GITHUB_ENV"
           echo "V12_FULL_REGRESSION=$full_regression" >> "$GITHUB_ENV"
 
       - name: Run real V11 UAT suite with V12 impact context
-        timeout-minutes: 4
+        timeout-minutes: 3
         run: |
           set -Eeuo pipefail
-
           echo "==> Target UAT: $UAT_BASE_URL"
-          echo "==> V12 impact risk: $V12_IMPACT_RISK ($V12_IMPACT_SCORE/100)"
-          echo "==> Full regression recommendation: $V12_FULL_REGRESSION"
-          echo "==> Verifying public HTTPS health endpoint"
-          health="$(curl --connect-timeout 10 --max-time 30 -fsS "$UAT_BASE_URL/actuator/health")"
+          health="$(curl --connect-timeout 5 --max-time 20 -fsS "$UAT_BASE_URL/actuator/health")"
           echo "$health"
-          echo "$health" | grep -q '"status":"UP"' || {
-            echo "ERROR: UAT health check did not report UP"
-            exit 1
-          }
+          echo "$health" | grep -q '"status":"UP"'
 
           run_uat() {
-            local test_id="$1"
-            local url="$2"
-            local expected="$3"
-            local payload
-            payload="$(jq -n \
-              --arg testId "$test_id" \
-              --arg url "$url" \
-              --arg expected "$expected" \
-              '{testId:$testId,url:$url,steps:["Open the application"],expectedResult:$expected,headless:true}')"
-
-            echo "==> Executing $test_id against $url"
-            local response
-            response="$(curl --connect-timeout 10 --max-time 90 -fsS \
-              -X POST "$UAT_BASE_URL/api/execution/run" \
-              -H 'Content-Type: application/json' \
-              --data "$payload")"
+            local test_id="$1" url="$2" expected="$3"
+            local payload response status
+            payload="$(jq -n --arg testId "$test_id" --arg url "$url" --arg expected "$expected" '{testId:$testId,url:$url,steps:["Open the application"],expectedResult:$expected,headless:true}')"
+            echo "==> Executing $test_id"
+            response="$(curl --connect-timeout 5 --max-time 60 -fsS -X POST "$UAT_BASE_URL/api/execution/run" -H 'Content-Type: application/json' --data "$payload")"
             echo "$response"
-
-            local status
             status="$(echo "$response" | jq -r '.status // "UNKNOWN"')"
             echo "==> $test_id result: $status"
-            echo "$response" | jq -r 'if .evidenceUrl then "==> Evidence: " + .evidenceUrl else empty end'
             [ "$status" = "PASS" ]
           }
 
           total_tests=2
           passed_tests=0
-
-          if run_uat "V11-UAT-001" "$UAT_BASE_URL" ""; then
-            passed_tests=$((passed_tests + 1))
-          fi
-
-          if run_uat "V11-UAT-002" "$UAT_BASE_URL/actuator/health" "UP"; then
-            passed_tests=$((passed_tests + 1))
-          fi
-
+          run_uat "V11-UAT-001" "$UAT_BASE_URL" "" && passed_tests=$((passed_tests + 1)) || true
+          run_uat "V11-UAT-002" "$UAT_BASE_URL/actuator/health" "UP" && passed_tests=$((passed_tests + 1)) || true
           failed_tests=$((total_tests - passed_tests))
-
           echo "==> Real UAT summary: total=$total_tests passed=$passed_tests failed=$failed_tests"
-
           echo "$total_tests" > "$RUNNER_TEMP/uat_total"
           echo "$passed_tests" > "$RUNNER_TEMP/uat_passed"
           echo "$failed_tests" > "$RUNNER_TEMP/uat_failed"
 
       - name: Run V11 Quality Gate from real UAT results
-        timeout-minutes: 3
+        timeout-minutes: 2
         run: |
           set -Eeuo pipefail
-
           total_tests="$(cat "$RUNNER_TEMP/uat_total")"
           passed_tests="$(cat "$RUNNER_TEMP/uat_passed")"
           failed_tests="$(cat "$RUNNER_TEMP/uat_failed")"
-
-          echo "==> Executing V11 quality gate from real UAT results"
-          response="$(curl --connect-timeout 10 --max-time 30 -fsS \
-            -X POST "$UAT_BASE_URL/api/quality-gate/evaluate" \
-            -H 'Content-Type: application/json' \
-            --data "$(jq -n \
-              --argjson total "$total_tests" \
-              --argjson passed "$passed_tests" \
-              --argjson failed "$failed_tests" \
-              '{
-                totalTests: $total,
-                passedTests: $passed,
-                failedTests: $failed,
-                automatedTests: $total,
-                requirements: 2,
-                coveredRequirements: $passed
-              }')")"
-
+          response="$(curl --connect-timeout 5 --max-time 20 -fsS -X POST "$UAT_BASE_URL/api/quality-gate/evaluate" -H 'Content-Type: application/json' --data "$(jq -n --argjson total "$total_tests" --argjson passed "$passed_tests" --argjson failed "$failed_tests" '{totalTests:$total,passedTests:$passed,failedTests:$failed,automatedTests:$total,requirements:2,coveredRequirements:$passed}')")"
           echo "$response" | jq .
-
           decision="$(echo "$response" | jq -r '.decision // "UNKNOWN"')"
-          if [ "$decision" != "APPROVED" ]; then
-            echo "ERROR: V11 quality gate BLOCKED the deployment"
-            exit 1
-          fi
-
-          echo "==> V11 quality gate APPROVED"
-          echo "==> V12 Impact Analysis -> V11 UAT -> Quality Gate -> CI/CD completed successfully"
+          [ "$decision" = "APPROVED" ]
+          echo "==> V11 Quality Gate APPROVED"
