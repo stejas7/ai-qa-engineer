@@ -5,42 +5,58 @@ on:
     branches:
       - main
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.2
+        timeout-minutes: 8
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 6m
           script: |
-            set -e
+            set -Eeuo pipefail
             cd ~/ai-qa-engineer
 
-            echo "Pulling latest code..."
-            git fetch origin main
+            echo "==> Syncing latest main..."
+            timeout 60 git fetch --prune origin main
             git reset --hard origin/main
 
-            echo "Building and starting Docker containers..."
-            sudo docker compose up -d --build
+            echo "==> Building and starting containers..."
+            timeout 300 sudo docker compose up -d --build --remove-orphans
 
-            echo "Waiting for application startup..."
+            echo "==> Waiting for application health..."
+            healthy=false
             for i in $(seq 1 30); do
-              if curl -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
-                echo "Application is healthy:"
-                cat /tmp/health.json
-                exit 0
+              if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
+                healthy=true
+                break
               fi
               sleep 2
             done
 
-            echo "Deployment failed: application health check did not pass."
-            echo "Docker Compose status:"
-            sudo docker compose ps -a
-            echo "Recent application logs:"
-            sudo docker compose logs --tail=150 ai-qa-api
+            if [ "$healthy" = true ]; then
+              echo "==> Application is healthy"
+              cat /tmp/health.json
+              sudo docker compose ps
+              exit 0
+            fi
+
+            echo "==> Deployment failed: health check did not pass"
+            echo "==> Docker Compose status"
+            sudo docker compose ps -a || true
+            echo "==> Recent application logs"
+            timeout 30 sudo docker compose logs --tail=150 ai-qa-api || true
+            echo "==> Recent container logs"
+            timeout 30 sudo docker compose logs --tail=80 || true
             exit 1
