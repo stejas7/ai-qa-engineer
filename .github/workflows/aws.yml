@@ -82,23 +82,47 @@ jobs:
           sudo systemctl is-active docker || true
           sudo docker info --format 'Docker={{.ServerVersion}} Storage={{.Driver}}' || true
 
+          echo "==> Stopping this application's containers before cleanup"
+          # Keep named volumes: PostgreSQL data must survive deployments.
+          sudo docker compose down --remove-orphans || true
+
           echo "==> Restarting Docker to recover containerd state"
           sudo systemctl restart docker
           timeout 60 bash -c 'until sudo docker info >/dev/null 2>&1; do sleep 2; done'
           echo "==> Docker daemon is ready"
 
-          echo "==> Docker disk usage before cleanup"
-          sudo docker system df || true
-          df -h / || true
+          echo "==> Disk usage before cleanup"
+          df -h /
+          sudo du -xhd1 /var/lib/docker 2>/dev/null | sort -h | tail -20 || true
 
-          echo "==> Safely cleaning unused Docker data"
-          # Volumes are deliberately NOT pruned; persistent application/database data is preserved.
-          timeout 120 sudo docker system prune -af
-          timeout 120 sudo docker builder prune -af || true
+          echo "==> Cleaning OS package and journal caches"
+          sudo apt-get clean || true
+          sudo journalctl --vacuum-size=100M || true
+          sudo rm -rf /tmp/* /var/tmp/* || true
+
+          echo "==> Cleaning unused Docker containers, images and networks"
+          # Volumes are deliberately NOT pruned; postgres_data is persistent application data.
+          timeout 180 sudo docker system prune -af --filter 'until=24h' || true
+          timeout 180 sudo docker image prune -af || true
+          timeout 180 sudo docker builder prune -af || true
 
           echo "==> Docker disk usage after cleanup"
           sudo docker system df || true
-          df -h / || true
+          df -h /
+
+          available_kb="$(df --output=avail / | tail -1 | tr -d ' ')"
+          available_gb=$((available_kb / 1024 / 1024))
+          echo "==> Available root filesystem: ${available_gb}GB"
+
+          # The official Playwright Java image is intentionally large because it contains
+          # Chromium and native browser dependencies. Fail early with a useful message
+          # instead of allowing containerd to fail halfway through a multi-GB layer write.
+          if [ "$available_kb" -lt 4194304 ]; then
+            echo "ERROR: Less than 4GB free on / after Docker cleanup."
+            echo "The Playwright runtime image requires several GB of temporary build/storage space."
+            echo "Increase the EC2 root EBS volume and retry the deployment."
+            exit 1
+          fi
 
           echo "==> Pulling images before deployment"
           if ! timeout 180 sudo docker compose pull; then
@@ -109,7 +133,14 @@ jobs:
           fi
 
           echo "==> Building and starting containers..."
-          timeout 300 sudo docker compose up -d --build --remove-orphans
+          if ! timeout 300 sudo docker compose up -d --build --remove-orphans; then
+            echo "==> Docker build/start failed; collecting disk and Docker diagnostics"
+            df -h / || true
+            sudo docker system df || true
+            sudo du -xhd1 /var/lib/docker 2>/dev/null | sort -h | tail -20 || true
+            sudo docker compose ps -a || true
+            exit 1
+          fi
           echo "==> Containers started"
 
           echo "==> Waiting for application health..."
