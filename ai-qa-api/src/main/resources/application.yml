@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: ai-qa-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/aiqa}
+    username: ${DB_USER:aiqa}
+    password: ${DB_PASSWORD:aiqa}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+server:
+  port: 8080
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4.1-mini}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
