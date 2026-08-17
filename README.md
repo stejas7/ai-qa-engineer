@@ -1,8 +1,12 @@
-# AI QA Engineer — V3
+# AI QA Engineer — V5
 
 A build-first demo of an AI-driven QA/UAT automation platform.
 
-## V1
+## Current flow
+
+Business Requirement → AI Requirement Analysis → Test Design → Playwright Automation → UAT Execution → Evidence → AI Failure Analysis.
+
+## V1 — Requirement Agent
 Business Requirement → AI Requirement Analysis → structured test scenarios → PostgreSQL → dashboard.
 
 ## V2 — Test Design Agent
@@ -11,13 +15,24 @@ Business Requirement → AI Requirement Analysis → detailed executable test ca
 ## V3 — Playwright Automation Agent
 Test case → automation request → generated Java + Playwright test skeleton.
 
-V3 adds:
-- Playwright Java dependency
-- Automation generation API: `POST /api/automation/generate`
-- Generated JUnit 5 + Playwright test class
-- UAT base URL input
-- Step-to-code mapping placeholders for the next AI locator phase
-- Dedicated V3 browser dashboard
+## V4 — UAT Execution Agent
+V4 adds a deliberately simple demo UAT login application and a real Playwright execution endpoint.
+
+- Demo UAT: `/uat/`
+- Execution dashboard: `/v4.html`
+- API: `POST /api/execution/run`
+- Captures execution duration and screenshot evidence
+- Supports natural-language steps for the demo login flow
+
+## V5 — Failure Analysis Agent
+V5 automatically sends failed V4 executions to a failure-analysis agent.
+
+- Dashboard: `/v5.html`
+- API: `POST /api/failure-analysis/analyze`
+- Deterministic fallback works without an AI key
+- Optional OpenAI Responses API analysis when `OPENAI_API_KEY` is configured
+- Classifies failures as application/requirement, automation/application, environment/performance, test data, or unknown
+- Recommends retry or investigation
 
 ## Stack
 - Java 21
@@ -29,41 +44,52 @@ V3 adds:
 - Docker / Docker Compose
 - GitHub Actions
 
-## Run
+## Run in GitHub Codespaces
+
 ```bash
-git checkout v3-playwright-automation-agent
+git checkout main
+git pull origin main
 docker compose up -d postgres
 mvn clean verify
+mvn -q exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
 mvn spring-boot:run -pl ai-qa-api
 ```
 
-Open `http://localhost:8080/v3.html` for the V3 dashboard.
-Health: `http://localhost:8080/actuator/health`
+Keep the Spring Boot terminal running. Open the forwarded Codespaces port 8080, not `localhost:8080` in your local browser.
 
-## V3 API
-POST `/api/automation/generate`
+Then open:
+- `/v4.html` for a passing execution
+- `/v5.html` for execution + failure analysis
+- `/uat/` for the demo UAT app
+- `/actuator/health` for health
 
-Example:
-```json
-{
-  "testId": "TC-001",
-  "title": "Password reset happy path",
-  "url": "http://localhost:8081",
-  "steps": [
-    "Open the application",
-    "Enter registered email",
-    "Click reset password",
-    "Verify reset confirmation"
-  ],
-  "expectedResult": "A reset confirmation is displayed."
-}
-```
+### Passing V4/V5 demo
 
-The generated source intentionally marks locator/action mapping as TODO in V3. V3.1 will use AI to turn natural-language steps into Playwright locators and actions. V4 will add a dummy UAT application and real execution.
+Use:
+- URL: `/uat/`
+- Email: `test@example.com`
+- Password: `Password123`
+- Expected: `Verify Welcome Test User`
+
+### Failure-analysis demo
+
+Use the same steps but change Expected result to:
+`Verify Welcome Tejas`
+
+The UAT app returns `Welcome Test User`, so the test fails and V5 analyzes the failure.
+
+## APIs
+
+### V3
+`POST /api/automation/generate`
+
+### V4
+`POST /api/execution/run`
+
+### V5
+`POST /api/failure-analysis/analyze`
 
 ## Roadmap
-V4 → Dummy UAT Application + Execution Agent
-V5 → Failure Analysis Agent
 V6 → Safe Self-Healing
 V7 → RAG with pgvector
 V8 → Jira/Git/CI tools
