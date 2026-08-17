@@ -12,13 +12,19 @@ concurrency:
 
 env:
   UAT_BASE_URL: https://tejas-aiqa.duckdns.org
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/stejas7/ai-qa-engineer
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   deploy:
     name: Deploy to EC2
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
 
     steps:
       - name: Checkout tested commit for V12 impact analysis
@@ -27,12 +33,14 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2
 
-      - name: Deploy to EC2
-        timeout-minutes: 7
+      - name: Deploy immutable image to EC2
+        timeout-minutes: 5
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
         run: |
           set -Eeuo pipefail
 
@@ -40,69 +48,63 @@ jobs:
           chmod 600 "$RUNNER_TEMP/ec2_key"
           trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
 
+          SSH_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=1
+            -o ServerAliveInterval=10
+            -o ServerAliveCountMax=3
+            -o StrictHostKeyChecking=no
+            -i "$RUNNER_TEMP/ec2_key"
+          )
+
           echo "==> Target: $EC2_HOST"
           timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'
+          timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
 
-          timeout 30 ssh \
-            -o BatchMode=yes \
-            -o ConnectTimeout=15 \
-            -o ConnectionAttempts=1 \
-            -o ServerAliveInterval=5 \
-            -o ServerAliveCountMax=2 \
-            -o StrictHostKeyChecking=no \
-            -i "$RUNNER_TEMP/ec2_key" \
-            "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
+          echo "==> Authenticating EC2 to GHCR"
+          printf '%s' "$GHCR_TOKEN" | timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" \
+            'sudo docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin' \
+            env GITHUB_ACTOR="${{ github.actor }}"
 
-          timeout 6m ssh \
-            -T \
-            -o BatchMode=yes \
-            -o ConnectTimeout=15 \
-            -o ConnectionAttempts=1 \
-            -o ServerAliveInterval=10 \
-            -o ServerAliveCountMax=3 \
-            -o StrictHostKeyChecking=no \
-            -i "$RUNNER_TEMP/ec2_key" \
-            "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE_SCRIPT'
+          timeout 4m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<REMOTE_SCRIPT
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
+          IMAGE='$IMAGE'
 
-          echo "==> Syncing tested main commit"
+          echo "==> Syncing deployment compose configuration"
           timeout 60 git fetch --prune origin main
           git reset --hard origin/main
 
           echo "==> Current disk"
           df -h /
-
-          # Normal deployments keep Docker/build cache warm. Cleanup is only
-          # performed when the root filesystem crosses the safety threshold.
-          available_kb="$(df --output=avail / | tail -1 | tr -d ' ')"
-          if [ "$available_kb" -lt 8388608 ]; then
+          available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
+          if [ "\$available_kb" -lt 8388608 ]; then
             echo "==> Low disk detected; performing emergency Docker cleanup"
-            sudo docker compose down --remove-orphans || true
-            sudo apt-get clean || true
-            sudo journalctl --vacuum-size=100M || true
-            timeout 180 sudo docker system prune -af --filter 'until=24h' || true
+            sudo docker system prune -af --filter 'until=24h' || true
             timeout 180 sudo docker builder prune -af || true
-          else
-            echo "==> Disk healthy; preserving Docker/build cache"
           fi
 
-          available_kb="$(df --output=avail / | tail -1 | tr -d ' ')"
-          available_gb=$((available_kb / 1024 / 1024))
-          echo "==> Available root filesystem: ${available_gb}GB"
-          if [ "$available_kb" -lt 4194304 ]; then
+          available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
+          available_gb=\$((available_kb / 1024 / 1024))
+          echo "==> Available root filesystem: \${available_gb}GB"
+          if [ "\$available_kb" -lt 4194304 ]; then
             echo "ERROR: Less than 4GB free on /"
             exit 1
           fi
 
-          echo "==> Building and starting application"
-          # Keep the local Docker cache between deployments. This avoids
-          # re-downloading the large Playwright runtime on every commit.
-          timeout 300 sudo docker compose up -d --build --remove-orphans
+          previous_image="\$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
+          echo "==> Previous image: \${previous_image:-none}"
+          echo "==> Pulling immutable image: \$IMAGE"
+          timeout 4m sudo docker pull "\$IMAGE"
+
+          echo "==> Starting exact tested image"
+          export AI_QA_IMAGE="\$IMAGE"
+          sudo -E docker compose up -d --remove-orphans
 
           echo "==> Waiting for application health"
           healthy=false
-          for i in $(seq 1 20); do
+          for i in \$(seq 1 20); do
             if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
               healthy=true
               break
@@ -110,15 +112,20 @@ jobs:
             sleep 2
           done
 
-          if [ "$healthy" = true ]; then
+          if [ "\$healthy" = true ]; then
             cat /tmp/health.json
             sudo docker compose ps
+            sudo docker logout ghcr.io >/dev/null 2>&1 || true
             exit 0
           fi
 
-          echo "==> Deployment failed: health check did not pass"
-          sudo docker compose ps -a || true
-          timeout 30 sudo docker compose logs --tail=150 ai-qa-api || true
+          echo "==> New image failed health check; attempting rollback"
+          sudo docker compose logs --tail=150 ai-qa-api || true
+          if [ -n "\${previous_image:-}" ]; then
+            export AI_QA_IMAGE="\$previous_image"
+            sudo -E docker compose up -d --remove-orphans
+          fi
+          sudo docker logout ghcr.io >/dev/null 2>&1 || true
           exit 1
           REMOTE_SCRIPT
 
