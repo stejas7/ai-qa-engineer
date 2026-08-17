@@ -1,200 +1,263 @@
-# AI QA Engineer — Agentic AI Quality Engineering Platform
+# AI QA Engineer 1.0.0 — Agentic AI Quality Engineering Platform
 
 > **Business requirements in. Executable UAT out. Evidence-backed quality decisions all the way to CI/CD.**
 
-AI QA Engineer is a build-first reference implementation for combining **Java, Spring Boot, GenAI, Playwright, RAG and multi-agent orchestration** into a production-oriented AI Quality Engineering platform.
+AI QA Engineer is an **Agentic AI Quality Engineering Platform** that connects business requirements, intelligent test engineering, deterministic browser execution, agent orchestration, governance, evidence, quality decisions and cloud delivery in one continuous engineering workflow.
 
-The project is intentionally designed to demonstrate the architecture and engineering practices expected from a **Java → GenAI / Agentic AI Architect**: deterministic services execute actions, AI agents reason and plan, policy controls autonomy, every important action produces evidence, and CI/CD consumes a measurable quality decision.
+The platform is designed to demonstrate the architecture expected from a **Java → GenAI / Agentic AI Architect**:
+
+> **AI plans and reasons. Deterministic tools execute. Governance controls autonomy. Evidence explains what happened. The Quality Gate decides whether delivery can continue.**
 
 ---
 
-## ⭐ The product vision
+## 🚀 Version 1.0.0 Stable
+
+This release consolidates the platform capabilities developed through the project's engineering milestones into **one product architecture and one stable product identity**.
+
+The historical V1–V12 milestones remain part of the Git engineering history; they are no longer separate product versions. **AI QA Engineer 1.0.0 is the product.**
+
+### The complete product flow
 
 ```text
-                 BUSINESS REQUIREMENT
-                          │
-                          ▼
-                ┌──────────────────┐
-                │ Requirement Agent │
-                └────────┬─────────┘
-                         ▼
-                  Test Design Agent
-                         │
-                         ▼
-                Automation Generator
-                         │
-                         ▼
-                 Real UAT Execution
-                         │
-             ┌───────────┴───────────┐
-             ▼                       ▼
-          Evidence              Failure Analysis
-             │                       │
-             └───────────┬───────────┘
-                         ▼
-                  Agent Orchestrator
-                         │
-                  Policy + Approval
-                         │
-                         ▼
-                   Quality Gate
-                         │
-                 APPROVED / BLOCKED
-                         │
-                         ▼
-                       CI/CD
-                         │
-                         ▼
-                    AWS Deployment
+                         BUSINESS REQUIREMENT
+                                  │
+                                  ▼
+                     ┌────────────────────────┐
+                     │ Intelligent Test       │
+                     │ Engineering            │
+                     │                        │
+                     │ Requirement → Test     │
+                     │ Test → Automation      │
+                     └───────────┬────────────┘
+                                 │
+                                 ▼
+                     ┌────────────────────────┐
+                     │ Agentic Orchestration   │
+                     │                        │
+                     │ AgentRun / AgentStep   │
+                     │ Specialized Agents     │
+                     └───────────┬────────────┘
+                                 │
+                                 ▼
+                     ┌────────────────────────┐
+                     │ Quality Intelligence    │
+                     │                        │
+                     │ Impact Analysis        │
+                     │ UAT Selection          │
+                     │ Failure Analysis       │
+                     └───────────┬────────────┘
+                                 │
+                                 ▼
+                     ┌────────────────────────┐
+                     │ Deterministic Execution │
+                     │                        │
+                     │ Playwright / API       │
+                     │ Evidence / Results     │
+                     └───────────┬────────────┘
+                                 │
+                                 ▼
+                     ┌────────────────────────┐
+                     │ Governed Autonomy       │
+                     │                        │
+                     │ Policy • Approval      │
+                     │ Audit • Tool Controls  │
+                     └───────────┬────────────┘
+                                 │
+                                 ▼
+                     ┌────────────────────────┐
+                     │ Autonomous Quality Gate │
+                     │                        │
+                     │ APPROVED / BLOCKED     │
+                     └───────────┬────────────┘
+                                 │
+                                 ▼
+                     ┌────────────────────────┐
+                     │ Continuous Delivery     │
+                     │                        │
+                     │ GitHub Actions         │
+                     │ Docker → AWS → HTTPS   │
+                     └────────────────────────┘
 ```
 
-### The core principle
-
-**AI decides what should happen; deterministic software decides how it is executed.**
-
-That separation makes the platform safer, testable, observable and explainable.
-
 ---
 
-## 🏆 Why this project is different
+# ⭐ Why AI QA Engineer?
 
-This is not only an AI test-case generator and not only a Playwright wrapper.
+This is not simply an AI test-case generator and not simply a Playwright wrapper.
 
-The platform combines five layers:
+It combines six product capabilities:
 
-1. **Quality engineering** — requirements, test design, automation, execution and evidence.
-2. **Agentic engineering** — persisted `AgentRun` / `AgentStep` state and an orchestrator for specialized agents.
-3. **Governance** — deterministic policies, sensitive-action controls and human approval.
-4. **Autonomous quality** — a measurable quality gate that can approve or block a deployment.
-5. **Cloud delivery** — GitHub Actions, Docker, AWS EC2 and HTTPS UAT.
+### 1. Intelligent Test Engineering
 
-The result is a practical reference architecture for **controlled AI autonomy in software delivery**.
+- Business requirement understanding
+- Functional, negative and boundary test design
+- Requirement/test traceability
+- Automation generation
+- UAT scenario generation
 
----
+### 2. Agentic Execution
 
-## 🚀 Current release status
+- Persisted `AgentRun` and `AgentStep` state
+- Agent orchestration
+- Specialized agent pipelines
+- Controlled tool execution
+- Real browser UAT through Playwright
+- Evidence capture
 
-| Milestone | Capability | Status |
-|---|---|---|
-| V1 | Requirement Analysis Agent | ✅ |
-| V2 | Test Design Agent | ✅ |
-| V3 | Automation Generation | ✅ |
-| V4 | Real Playwright UAT Execution | ✅ |
-| V5 | AI Failure Analysis | ✅ |
-| V6 | Safe Self-Healing foundation | ✅ |
-| V7 | RAG + Enterprise Knowledge | ✅ |
-| V8 | Multi-Agent + Tool Orchestration | ✅ |
-| V9 | Autonomous CI/CD + AWS Cloud | ✅ **Deployed baseline** |
-| V10 | Production Agent Governance | ✅ |
-| V11 | Real UAT → Quality Gate → CI/CD | ✅ **Current milestone** |
-| V12 | Next-generation autonomous QE | 🔜 Planned |
+### 3. Quality Intelligence
 
-### V11 is now a real deployment flow
+- Git/PR change-impact analysis
+- Risk classification
+- Regression recommendations
+- Failure analysis
+- Requirement coverage
+- Execution evidence
 
-The current GitHub Actions deployment path is:
+### 4. Governed Autonomy
+
+- Deterministic policy engine
+- `ALLOW`, `APPROVAL_REQUIRED`, `DENY`
+- Human approval workflow
+- Auditability
+- Protection around sensitive and destructive actions
+
+### 5. Autonomous Quality Gate
+
+Real UAT results become a measurable release decision:
 
 ```text
-Push to main
-   ↓
-Build
-   ↓
-Safe Docker recovery / cleanup
-   ↓
-Deploy to AWS EC2
-   ↓
-Application health check
-   ↓
-Real UAT execution through Playwright
-   ↓
-Collect PASS / FAIL + evidence
-   ↓
-V11 Quality Gate
-   ↓
-APPROVED → deployment pipeline succeeds
-BLOCKED  → deployment pipeline fails
+UAT execution
+     ↓
+PASS / FAIL + evidence
+     ↓
+Coverage + automation + pass-rate evaluation
+     ↓
+QUALITY GATE
+     ↓
+APPROVED / BLOCKED
 ```
 
-Current HTTPS UAT environment:
+### 6. Continuous Delivery
 
-**https://tejas-aiqa.duckdns.org**
+```text
+Git push
+   ↓
+GitHub Actions
+   ↓
+Docker recovery / cleanup
+   ↓
+AWS EC2 deployment
+   ↓
+Application health
+   ↓
+Real HTTPS UAT
+   ↓
+Quality Gate
+   ↓
+Release decision
+```
 
 ---
 
 # 🧠 Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│                       AI QA ENGINEER                         │
-├──────────────────────────────────────────────────────────────┤
-│ Presentation / API                                           │
-│  REST Controllers • Dashboards • Actuator                    │
-├──────────────────────────────────────────────────────────────┤
-│ Agentic Layer                                                │
-│  AgentOrchestrator • AgentRun • AgentStep • AgentPipeline   │
-├──────────────────────────────────────────────────────────────┤
-│ Specialized AI Capabilities                                  │
-│  Requirement • Test Design • Automation • RAG • Analysis    │
-├──────────────────────────────────────────────────────────────┤
-│ Deterministic Tool Layer                                     │
-│  Playwright • Persistence • Reporting • CI/CD                │
-├──────────────────────────────────────────────────────────────┤
-│ Governance                                                   │
-│  Policy Engine • Approval • Audit                            │
-├──────────────────────────────────────────────────────────────┤
-│ Quality Decision                                             │
-│  UAT Evidence → Quality Gate → APPROVED / BLOCKED           │
-├──────────────────────────────────────────────────────────────┤
-│ Delivery                                                     │
-│  GitHub Actions → Docker → AWS EC2 → Nginx → HTTPS          │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         AI QA ENGINEER 1.0.0                    │
+├─────────────────────────────────────────────────────────────────┤
+│ PRODUCT EXPERIENCE                                              │
+│ Requirements • Tests • Automation • Agent Runs • Quality        │
+├─────────────────────────────────────────────────────────────────┤
+│ INTELLIGENT ENGINEERING                                         │
+│ Requirement Analysis • Test Design • Automation • RAG           │
+├─────────────────────────────────────────────────────────────────┤
+│ AGENTIC ORCHESTRATION                                           │
+│ AgentOrchestrator • AgentRun • AgentStep • AgentPipeline        │
+├─────────────────────────────────────────────────────────────────┤
+│ QUALITY INTELLIGENCE                                            │
+│ Git/PR Impact • Regression Selection • Failure Analysis          │
+├─────────────────────────────────────────────────────────────────┤
+│ DETERMINISTIC TOOLS                                             │
+│ Playwright • API Execution • Persistence • Evidence              │
+├─────────────────────────────────────────────────────────────────┤
+│ GOVERNANCE                                                      │
+│ Policy Engine • Approval • Audit • Tool Boundaries               │
+├─────────────────────────────────────────────────────────────────┤
+│ QUALITY DECISION                                                │
+│ UAT Evidence → Quality Gate → APPROVED / BLOCKED                │
+├─────────────────────────────────────────────────────────────────┤
+│ DELIVERY                                                        │
+│ GitHub Actions → Docker → AWS EC2 → Nginx → HTTPS               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Architecture principles
+## Architectural principles
 
-- **Orchestrator-first:** specialized agents participate in a persisted workflow.
-- **Tool isolation:** external systems are accessed through controlled contracts.
-- **Structured outputs:** APIs return typed, machine-readable data rather than agent prose.
-- **Deterministic execution:** LLMs reason and plan; deterministic tools perform actions.
-- **Evidence-first:** execution produces auditable results and screenshots.
-- **Safe autonomy:** sensitive or destructive actions can require approval.
-- **Provider-neutral:** the AI provider can evolve without redesigning the platform.
-- **Cloud-ready:** deployment is reproducible through Docker and GitHub Actions.
-- **Quality-gated delivery:** deployment is a consequence of measurable quality, not merely a successful build.
+- **AI/deterministic separation:** models reason and plan; deterministic services execute.
+- **Orchestrator-first:** important agent workflows are persisted and inspectable.
+- **Tool isolation:** external actions go through controlled service contracts.
+- **Structured outputs:** APIs return machine-readable results instead of relying on agent prose.
+- **Evidence-first:** UAT produces evidence that can be inspected after execution.
+- **Safe autonomy:** sensitive actions can require human approval.
+- **Provider-neutral:** AI providers can evolve without redesigning core execution.
+- **Quality-gated delivery:** deployment depends on validation, not merely compilation.
+- **Cloud-ready:** Docker and GitHub Actions make deployment reproducible.
 
 ---
 
-# 🤖 Agentic workflow
+# 🔄 Golden Demo Journey
 
-A persisted agent run follows the lifecycle:
+The recommended 1.0.0 demonstration is one complete business journey rather than a collection of disconnected APIs.
+
+### Example requirement
+
+> **A registered user should be able to log in with valid credentials and reach the dashboard.**
+
+### Platform execution
 
 ```text
-CREATED → RUNNING → COMPLETED
-                 ↘ FAILED
+1. Requirement received
+        ↓
+2. AI understands business intent
+        ↓
+3. UAT scenarios generated
+        ↓
+4. Automation generated
+        ↓
+5. Git/PR impact assessed
+        ↓
+6. Relevant UAT selected
+        ↓
+7. Agent orchestrates execution
+        ↓
+8. Playwright executes the user journey
+        ↓
+9. Evidence captured
+        ↓
+10. Result analyzed
+        ↓
+11. Governance evaluates sensitive actions
+        ↓
+12. Quality Gate evaluates release readiness
+        ↓
+13. APPROVED / BLOCKED
+        ↓
+14. CI/CD continues or stops
 ```
 
-Each run contains ordered steps such as:
+The key product question is no longer simply:
 
-```text
-REQUIREMENT_ANALYSIS
-        ↓
-TEST_DESIGN
-        ↓
-AUTOMATION_GENERATION
-        ↓
-EXECUTION
-        ↓
-FAILURE_ANALYSIS
-        ↓
-QUALITY_GATE
-```
+> **Did the build succeed?**
 
-This makes an AI workflow inspectable rather than a black box.
+It is:
+
+> **Is this change sufficiently validated against business intent to proceed?**
 
 ---
 
-# 🛡️ V10 — Production Agent Governance
+# 🛡️ Governed Agentic AI
 
-V10 places a deterministic safety boundary between agent reasoning and external actions.
+The platform deliberately avoids unrestricted AI autonomy.
 
 ### Policy decisions
 
@@ -210,40 +273,91 @@ Example:
 }
 ```
 
-Possible decisions:
+Possible outcomes:
 
-- `ALLOW` — permitted by deterministic policy.
-- `APPROVAL_REQUIRED` — human approval is required.
-- `DENY` — no policy permits the action.
+- `ALLOW`
+- `APPROVAL_REQUIRED`
+- `DENY`
 
-Sensitive tools such as shell/SSH/secrets and destructive production actions are not silently trusted.
+### Approval workflow
 
-### Human approval APIs
+```text
+Agent proposes action
+        ↓
+Policy Engine
+   ┌────┼─────────┐
+   ▼    ▼         ▼
+ ALLOW APPROVAL  DENY
+        │
+        ▼
+ Human decision
+        │
+        ▼
+     Continue
+```
+
+Approval APIs:
 
 - `POST /api/governance/approvals`
 - `GET /api/governance/approvals/pending`
 - `GET /api/governance/runs/{runId}/approvals`
 - `POST /api/governance/approvals/{approvalId}/decision`
 
-Approval requests are persisted and can be associated with an `AgentRun`.
+---
+
+# 🔎 Change Impact Intelligence
+
+The platform can analyze Git/PR changes and produce an explainable impact assessment before regression execution.
+
+```text
+Git diff
+   ↓
+Impact Analysis
+   ↓
+Risk score
+   ↓
+Impacted areas
+   ↓
+Recommended suites
+   ↓
+Targeted regression / full regression
+```
+
+This creates the foundation for intelligent regression rather than blindly running the entire test estate after every change.
 
 ---
 
-# ✅ V11 — Real UAT + Autonomous Quality Gate
-
-V11 turns UAT results into a deployment decision.
-
-### Execution
+# 🧪 Real UAT Execution
 
 `POST /api/execution/run`
 
-The execution service launches Playwright, navigates to the target URL, performs supported business steps, verifies expected results and captures evidence.
+The execution service uses Playwright to perform supported business steps against a real application, verify expected outcomes and capture evidence.
 
-### Quality gate
+Typical execution lifecycle:
+
+```text
+Create test
+   ↓
+Launch browser
+   ↓
+Navigate
+   ↓
+Execute business steps
+   ↓
+Verify expected result
+   ↓
+Capture evidence
+   ↓
+PASS / FAIL
+```
+
+---
+
+# 🚦 Quality Gate
 
 `POST /api/quality-gate/evaluate`
 
-Example:
+Example input:
 
 ```json
 {
@@ -256,91 +370,125 @@ Example:
 }
 ```
 
-The gate calculates:
+The gate evaluates:
 
 - pass rate
 - automation rate
 - requirement coverage
-- final deployment decision
-
-A clean execution with complete requirement coverage returns `APPROVED`; failures or incomplete coverage return `BLOCKED`.
-
-### Why the gate matters
-
-A conventional pipeline answers:
-
-> **Did the build succeed?**
-
-AI QA Engineer answers:
-
-> **Is the delivered change sufficiently validated against business requirements to proceed?**
-
-That is the central V11 product capability.
-
----
-
-# 📚 Version history
-
-| Version | Capability | Engineering outcome |
-|---|---|---|
-| V1 | Requirement Analysis | Convert business requirements into structured scenarios. |
-| V2 | Test Design | Generate functional, negative, boundary and traceability tests. |
-| V3 | Automation Generation | Generate Java + Playwright automation skeletons. |
-| V4 | UAT Execution | Execute real browser tests and capture evidence. |
-| V5 | Failure Analysis | Classify failures and recommend next actions. |
-| V6 | Safe Self-Healing | Generate candidate automation fixes with validation/approval. |
-| V7 | RAG | Ground agent reasoning in enterprise QA knowledge. |
-| V8 | Multi-Agent Orchestration | Persist agent runs, steps and controlled tool interactions. |
-| V9 | Cloud CI/CD | Build, deploy and validate on AWS EC2 through GitHub Actions. |
-| V10 | Governance | Policy, approval and audit boundary for agent actions. |
-| V11 | Quality Gate | Real UAT results control the CI/CD decision. |
-
----
-
-# 🔌 Key APIs
-
-| Area | Endpoint | Purpose |
-|---|---|---|
-| Automation | `POST /api/automation/generate` | Generate automation artifacts. |
-| Execution | `POST /api/execution/run` | Execute Playwright UAT. |
-| Failure | `POST /api/failure-analysis/analyze` | Analyze execution failures. |
-| Agents | `POST /api/agents/pipeline` | Run requirement → design → automation pipeline. |
-| Agents | `GET /api/agents/runs` | List agent runs. |
-| Agents | `GET /api/agents/runs/{id}` | Inspect one run. |
-| Agents | `GET /api/agents/runs/{id}/steps` | Inspect ordered agent steps. |
-| Governance | `POST /api/governance/policy/evaluate` | Evaluate an agent action. |
-| Governance | `POST /api/governance/approvals` | Create approval request. |
-| Governance | `GET /api/governance/approvals/pending` | List pending approvals. |
-| Governance | `POST /api/governance/approvals/{approvalId}/decision` | Approve/reject an action. |
-| Quality | `POST /api/quality-gate/evaluate` | Produce APPROVED/BLOCKED quality decision. |
-
----
-
-# 🧪 Testing strategy
-
-The project uses a layered testing strategy:
+- failed tests
+- final release decision
 
 ```text
-Unit tests
-   ↓
-Spring integration tests
-   ↓
-Playwright UAT
-   ↓
-Evidence validation
-   ↓
-Quality Gate
-   ↓
-CI/CD deployment decision
+                         UAT RESULTS
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │   QUALITY GATE   │
+                    └────────┬─────────┘
+                             │
+                   ┌─────────┴─────────┐
+                   ▼                   ▼
+               APPROVED             BLOCKED
+                   │                   │
+                   ▼                   ▼
+                CI/CD             Stop release
 ```
-
-JUnit/Spring tests validate deterministic business logic. Playwright validates the actual user journey. The quality gate validates the resulting release decision.
 
 ---
 
-# 🏗️ Technology stack
+# 🔌 Core API Surface
 
-- **Java 17+ / Java 21 development target**
+| Capability | Endpoint | Purpose |
+|---|---|---|
+| Automation | `POST /api/automation/generate` | Generate automation artifacts. |
+| Execution | `POST /api/execution/run` | Execute real UAT. |
+| Failure Intelligence | `POST /api/failure-analysis/analyze` | Analyze execution failures. |
+| Agent Pipeline | `POST /api/agents/pipeline` | Run the agent workflow. |
+| Agent Runs | `GET /api/agents/runs` | List agent runs. |
+| Agent Run | `GET /api/agents/runs/{id}` | Inspect a run. |
+| Agent Steps | `GET /api/agents/runs/{id}/steps` | Inspect ordered steps. |
+| Impact Analysis | `POST /api/impact-analysis/analyze` | Analyze Git/PR impact. |
+| Policy | `POST /api/governance/policy/evaluate` | Evaluate an agent action. |
+| Approvals | `POST /api/governance/approvals` | Create an approval request. |
+| Pending Approvals | `GET /api/governance/approvals/pending` | List pending approvals. |
+| Approval Decision | `POST /api/governance/approvals/{approvalId}/decision` | Approve/reject an action. |
+| Quality Gate | `POST /api/quality-gate/evaluate` | Produce release decision. |
+
+---
+
+# ☁️ Deployment Architecture
+
+```text
+                    GitHub main
+                         │
+                         ▼
+                  GitHub Actions
+                         │
+                         ▼
+               Build / Test / Package
+                         │
+                         ▼
+               Docker recovery/cleanup
+                         │
+                         ▼
+                      AWS EC2
+                         │
+                         ▼
+                   Docker Compose
+                         │
+                         ▼
+                    Spring Boot
+                         │
+                         ▼
+                       Nginx
+                         │
+                         ▼
+                  HTTPS / DuckDNS
+                         │
+                         ▼
+                  Real UAT execution
+                         │
+                         ▼
+                    Quality Gate
+```
+
+Persistent Docker volumes are protected during cleanup.
+
+### Live demo environment
+
+**HTTPS:** `https://tejas-aiqa.duckdns.org`
+
+Health endpoint:
+
+`https://tejas-aiqa.duckdns.org/actuator/health`
+
+---
+
+# 🧪 Testing Strategy
+
+```text
+Unit Tests
+    ↓
+Spring Integration Tests
+    ↓
+Agent Workflow Tests
+    ↓
+Playwright UAT
+    ↓
+Evidence Validation
+    ↓
+Quality Gate
+    ↓
+CI/CD Deployment Decision
+```
+
+Deterministic business logic is covered by Java/Spring tests. Real user journeys are validated through Playwright. The Quality Gate validates the release decision produced from execution results.
+
+---
+
+# 🏗️ Technology Stack
+
+- **Java 17+**
 - Spring Boot 3.5.3
 - Maven
 - PostgreSQL 16
@@ -354,28 +502,28 @@ JUnit/Spring tests validate deterministic business logic. Playwright validates t
 
 ---
 
-# 🚀 Run locally
+# 🚀 Local Development
 
 ### Prerequisites
 
 - JDK 17+
 - Maven 3.9+
 - Docker / Docker Compose
-- Node/Playwright browser dependencies as required by the local execution environment
+- Browser dependencies required by Playwright
 
-### Start the application
+### Validate the codebase
 
 ```bash
 mvn clean test
 ```
 
-Then start the services with Docker Compose:
+### Start services
 
 ```bash
 docker compose up -d --build
 ```
 
-Health check:
+### Health check
 
 ```text
 http://localhost:8080/actuator/health
@@ -389,73 +537,60 @@ Expected:
 
 ---
 
-# ☁️ AWS deployment
+# 📦 1.0.0 Release Philosophy
 
-The production-style deployment path is intentionally simple and reproducible:
+**1.0.0 means product coherence, not feature exhaustion.**
 
-```text
-GitHub main
-    ↓
-GitHub Actions
-    ↓
-SSH to EC2
-    ↓
-Safe Docker cleanup/recovery
-    ↓
-Docker Compose build/deploy
-    ↓
-Spring Boot health check
-    ↓
-Public HTTPS UAT
-    ↓
-Real Playwright tests
-    ↓
-Quality Gate
-```
+The stable release intentionally favors:
 
-Persistent Docker volumes are deliberately protected during cleanup.
+- deterministic execution over uncontrolled autonomy
+- explainable decisions over opaque scores
+- evidence over claims
+- governed actions over unrestricted agents
+- reproducible deployment over manual operations
+- a complete demo journey over dozens of disconnected features
+
+Future capabilities can extend the platform without changing the 1.0.0 architectural foundation.
 
 ---
 
-# 📈 V12 direction
+# 🗺️ Post-1.0 Evolution
 
-V12 is intentionally **not** a random feature dump. The next milestone should make the platform more autonomous while preserving the V10 governance boundary.
+The product is intentionally not branded by internal development milestones anymore.
 
-Priority candidates:
+Future releases may add capabilities such as:
 
-1. **Requirement → generated UAT suite** instead of a fixed CI smoke suite.
-2. **Persisted execution results** feeding the Quality Gate directly.
-3. **AI failure classification** integrated into the gate.
-4. **Safe self-healing loop:** failure → classify → repair candidate → validate → approval when required → re-test.
-5. **Intelligent test selection** from Git diff / requirement impact.
-6. **API + UI UAT** under one orchestration model.
-7. **AI application evaluation** for correctness, grounding, hallucination and safety.
-8. **MCP/tool gateway integration** for developer and CI agents.
+- richer requirement-to-UAT generation
+- persisted execution intelligence
+- deeper AI failure classification
+- policy-controlled self-healing
+- intelligent regression selection
+- API + UI quality journeys
+- GenAI application evaluation
+- MCP/tool integrations
+- advanced quality analytics
 
-The goal is not to claim autonomous behavior prematurely. Each V12 capability should be measurable, auditable and protected by policy.
+These are **future product evolution**, not missing pieces that prevent the 1.0.0 identity from being coherent.
 
 ---
 
-# 🎯 What this project demonstrates
+# 🎯 What 1.0.0 Demonstrates
 
-This project is designed to demonstrate end-to-end engineering capability across:
+**Java → Spring Boot → GenAI → RAG → Agents → Playwright → UAT → Governance → Git/PR Intelligence → Docker → GitHub Actions → AWS → Quality Engineering.**
 
-**Java → Spring Boot → GenAI → RAG → Agents → Playwright → UAT → Governance → Docker → GitHub Actions → AWS → Quality Engineering.**
-
-The strongest architectural statement is:
+The platform demonstrates how AI can participate in software quality and delivery without turning production automation into an uncontrolled black box.
 
 > **AI plans and reasons. Deterministic tools execute. Governance controls autonomy. Evidence explains what happened. The Quality Gate decides whether delivery can continue.**
 
 ---
 
-## Repository
+# 📌 Repository & Demo
 
-**AI QA Engineer:** https://github.com/stejas7/ai-qa-engineer
-
-**Live UAT:** https://tejas-aiqa.duckdns.org
+**Repository:** https://github.com/stejas7/ai-qa-engineer  
+**Live HTTPS UAT:** https://tejas-aiqa.duckdns.org
 
 ---
 
 ## License
 
-This repository is a learning and portfolio-oriented reference implementation. Adapt it to your organization's security, compliance and operational requirements before production use.
+This repository is a portfolio-oriented reference implementation. Adapt security, compliance, identity, secrets management and operational controls to your organization's requirements before production adoption.
