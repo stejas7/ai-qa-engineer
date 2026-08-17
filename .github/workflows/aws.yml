@@ -17,46 +17,82 @@ jobs:
 
     steps:
       - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.2.2
         timeout-minutes: 8
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 6m
-          script: |
-            set -Eeuo pipefail
-            cd ~/ai-qa-engineer
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
 
-            echo "==> Syncing latest main..."
-            timeout 60 git fetch --prune origin main
-            git reset --hard origin/main
+          printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
+          chmod 600 "$RUNNER_TEMP/ec2_key"
 
-            echo "==> Building and starting containers..."
-            timeout 300 sudo docker compose up -d --build --remove-orphans
+          cleanup() {
+            rm -f "$RUNNER_TEMP/ec2_key"
+          }
+          trap cleanup EXIT
 
-            echo "==> Waiting for application health..."
-            healthy=false
-            for i in $(seq 1 30); do
-              if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
-                healthy=true
-                break
-              fi
-              sleep 2
-            done
+          echo "==> Checking SSH connectivity..."
+          timeout 30 ssh \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ConnectionAttempts=1 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            -o StrictHostKeyChecking=no \
+            -i "$RUNNER_TEMP/ec2_key" \
+            "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
 
-            if [ "$healthy" = true ]; then
-              echo "==> Application is healthy"
-              cat /tmp/health.json
-              sudo docker compose ps
-              exit 0
+          echo "==> Starting remote deployment..."
+          timeout 7m ssh \
+            -T \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ConnectionAttempts=1 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            -o StrictHostKeyChecking=no \
+            -i "$RUNNER_TEMP/ec2_key" \
+            "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          cd ~/ai-qa-engineer
+          echo "==> Remote shell started"
+
+          echo "==> Syncing latest main..."
+          timeout 60 git fetch --prune origin main
+          git reset --hard origin/main
+          echo "==> Source synchronized"
+
+          echo "==> Building and starting containers..."
+          timeout 300 sudo docker compose up -d --build --remove-orphans
+          echo "==> Containers started"
+
+          echo "==> Waiting for application health..."
+          healthy=false
+          for i in $(seq 1 30); do
+            echo "==> Health check $i/30"
+            if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
+              healthy=true
+              break
             fi
+            sleep 2
+          done
 
-            echo "==> Deployment failed: health check did not pass"
-            echo "==> Docker Compose status"
-            sudo docker compose ps -a || true
-            echo "==> Recent application logs"
-            timeout 30 sudo docker compose logs --tail=150 ai-qa-api || true
-            echo "==> Recent container logs"
-            timeout 30 sudo docker compose logs --tail=80 || true
-            exit 1
+          if [ "$healthy" = true ]; then
+            echo "==> Application is healthy"
+            cat /tmp/health.json
+            sudo docker compose ps
+            exit 0
+          fi
+
+          echo "==> Deployment failed: health check did not pass"
+          echo "==> Docker Compose status"
+          sudo docker compose ps -a || true
+          echo "==> Recent application logs"
+          timeout 30 sudo docker compose logs --tail=150 ai-qa-api || true
+          echo "==> Recent container logs"
+          timeout 30 sudo docker compose logs --tail=80 || true
+          exit 1
+          REMOTE_SCRIPT
