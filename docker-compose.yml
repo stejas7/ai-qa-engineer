@@ -11,12 +11,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U aiqa -d aiqa"]
+      test: ["CMD-SHELL", "pg_isready -U aiqa -d aiqa"]
       interval: 5s
       timeout: 5s
       retries: 10
+
   ai-qa-api:
-    build: ./ai-qa-api
+    build:
+      context: .
+      dockerfile: ai-qa-api/Dockerfile
     container_name: ai-qa-api
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/aiqa
@@ -29,5 +32,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
 volumes:
   postgres_data:
