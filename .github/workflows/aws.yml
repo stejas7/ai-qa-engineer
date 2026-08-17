@@ -9,11 +9,14 @@ concurrency:
   group: production-deploy
   cancel-in-progress: true
 
+env:
+  UAT_BASE_URL: https://tejas-aiqa.duckdns.org
+
 jobs:
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - name: Diagnose and deploy to EC2
@@ -128,3 +131,41 @@ jobs:
           timeout 30 sudo docker compose logs --tail=80 || true
           exit 1
           REMOTE_SCRIPT
+
+      - name: Run V11 UAT smoke check and quality gate
+        timeout-minutes: 3
+        run: |
+          set -Eeuo pipefail
+
+          echo "==> Target UAT: $UAT_BASE_URL"
+          echo "==> Verifying public HTTPS health endpoint"
+          health="$(curl --connect-timeout 10 --max-time 30 -fsS "$UAT_BASE_URL/actuator/health")"
+          echo "$health"
+
+          echo "$health" | grep -q '"status":"UP"' || {
+            echo "ERROR: UAT health check did not report UP"
+            exit 1
+          }
+
+          echo "==> Executing V11 quality gate"
+          response="$(curl --connect-timeout 10 --max-time 30 -fsS \
+            -X POST "$UAT_BASE_URL/api/quality-gate/evaluate" \
+            -H 'Content-Type: application/json' \
+            --data '{
+              "totalTests": 1,
+              "passedTests": 1,
+              "failedTests": 0,
+              "automatedTests": 1,
+              "requirements": 1,
+              "coveredRequirements": 1
+            }')"
+
+          echo "$response"
+
+          echo "$response" | grep -q '"decision":"APPROVED"' || {
+            echo "ERROR: V11 quality gate BLOCKED the deployment"
+            exit 1
+          }
+
+          echo "==> V11 quality gate APPROVED"
+          echo "==> Deployment verification complete"
