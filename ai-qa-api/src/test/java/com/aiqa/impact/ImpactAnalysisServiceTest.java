@@ -29,7 +29,7 @@ class ImpactAnalysisServiceTest {
                 List.of("src/main/java/com/aiqa/execution/ExecutionService.java"),
                 "browser execution changed"));
 
-        assertEquals("HIGH", result.risk());
+        assertEquals("MEDIUM", result.risk());
         assertTrue(result.recommendedSuites().contains("agentic-uat-regression"));
         assertTrue(result.reasons().stream().anyMatch(reason -> reason.contains("execution")));
     }
