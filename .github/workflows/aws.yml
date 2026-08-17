@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Deploy to EC2
+      - name: Diagnose and deploy to EC2
         timeout-minutes: 8
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -27,19 +27,25 @@ jobs:
 
           printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
           chmod 600 "$RUNNER_TEMP/ec2_key"
+          trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
 
-          cleanup() {
-            rm -f "$RUNNER_TEMP/ec2_key"
-          }
-          trap cleanup EXIT
+          echo "==> Target: $EC2_HOST"
+          echo "==> Checking TCP port 22..."
+          if ! timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'; then
+            echo "ERROR: EC2 port 22 is unreachable from GitHub Actions."
+            echo "Check EC2 instance state, public IP, Security Group inbound TCP/22, NACL and sshd."
+            exit 1
+          fi
+          echo "==> TCP port 22 is reachable"
 
-          echo "==> Checking SSH connectivity..."
+          echo "==> Checking SSH banner..."
           timeout 30 ssh \
+            -vv \
             -o BatchMode=yes \
             -o ConnectTimeout=15 \
             -o ConnectionAttempts=1 \
-            -o ServerAliveInterval=10 \
-            -o ServerAliveCountMax=3 \
+            -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=2 \
             -o StrictHostKeyChecking=no \
             -i "$RUNNER_TEMP/ec2_key" \
             "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
@@ -56,10 +62,9 @@ jobs:
             -i "$RUNNER_TEMP/ec2_key" \
             "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE_SCRIPT'
           set -Eeuo pipefail
-
           cd ~/ai-qa-engineer
-          echo "==> Remote shell started"
 
+          echo "==> Remote shell started"
           echo "==> Syncing latest main..."
           timeout 60 git fetch --prune origin main
           git reset --hard origin/main
@@ -88,11 +93,8 @@ jobs:
           fi
 
           echo "==> Deployment failed: health check did not pass"
-          echo "==> Docker Compose status"
           sudo docker compose ps -a || true
-          echo "==> Recent application logs"
           timeout 30 sudo docker compose logs --tail=150 ai-qa-api || true
-          echo "==> Recent container logs"
           timeout 30 sudo docker compose logs --tail=80 || true
           exit 1
           REMOTE_SCRIPT
