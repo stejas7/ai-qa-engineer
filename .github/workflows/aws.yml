@@ -70,19 +70,35 @@ jobs:
           git reset --hard origin/main
           echo "==> Source synchronized"
 
+          echo "==> Docker daemon status before recovery"
+          sudo systemctl is-active docker || true
+          sudo docker info --format 'Docker={{.ServerVersion}} Storage={{.Driver}}' || true
+
+          echo "==> Restarting Docker to recover containerd state"
+          sudo systemctl restart docker
+          timeout 60 bash -c 'until sudo docker info >/dev/null 2>&1; do sleep 2; done'
+          echo "==> Docker daemon is ready"
+
           echo "==> Docker disk usage before cleanup"
           sudo docker system df || true
           df -h / || true
 
-          echo "==> Safely cleaning unused Docker build/cache data"
-          # Removes stopped containers, unused networks, dangling images,
-          # and unused build cache. Docker volumes are deliberately preserved.
+          echo "==> Safely cleaning unused Docker data"
+          # Volumes are deliberately NOT pruned; persistent application/database data is preserved.
           timeout 120 sudo docker system prune -af
           timeout 120 sudo docker builder prune -af || true
 
           echo "==> Docker disk usage after cleanup"
           sudo docker system df || true
           df -h / || true
+
+          echo "==> Pulling images before deployment"
+          if ! timeout 180 sudo docker compose pull; then
+            echo "==> Initial image pull failed; restarting Docker once and retrying"
+            sudo systemctl restart docker
+            timeout 60 bash -c 'until sudo docker info >/dev/null 2>&1; do sleep 2; done'
+            timeout 180 sudo docker compose pull
+          fi
 
           echo "==> Building and starting containers..."
           timeout 300 sudo docker compose up -d --build --remove-orphans
