@@ -16,7 +16,7 @@ jobs:
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
 
     steps:
       - name: Diagnose and deploy to EC2
@@ -132,8 +132,8 @@ jobs:
           exit 1
           REMOTE_SCRIPT
 
-      - name: Run V11 UAT smoke check and quality gate
-        timeout-minutes: 3
+      - name: Run real V11 UAT suite
+        timeout-minutes: 4
         run: |
           set -Eeuo pipefail
 
@@ -141,31 +141,89 @@ jobs:
           echo "==> Verifying public HTTPS health endpoint"
           health="$(curl --connect-timeout 10 --max-time 30 -fsS "$UAT_BASE_URL/actuator/health")"
           echo "$health"
-
           echo "$health" | grep -q '"status":"UP"' || {
             echo "ERROR: UAT health check did not report UP"
             exit 1
           }
 
-          echo "==> Executing V11 quality gate"
+          run_uat() {
+            local test_id="$1"
+            local url="$2"
+            local expected="$3"
+            local payload
+            payload="$(jq -n \
+              --arg testId "$test_id" \
+              --arg url "$url" \
+              --arg expected "$expected" \
+              '{testId:$testId,url:$url,steps:["Open the application"],expectedResult:$expected,headless:true}')"
+
+            echo "==> Executing $test_id against $url"
+            local response
+            response="$(curl --connect-timeout 10 --max-time 90 -fsS \
+              -X POST "$UAT_BASE_URL/api/execution/run" \
+              -H 'Content-Type: application/json' \
+              --data "$payload")"
+            echo "$response"
+
+            local status
+            status="$(echo "$response" | jq -r '.status // "UNKNOWN"')"
+            echo "==> $test_id result: $status"
+            echo "$response" | jq -r 'if .evidenceUrl then "==> Evidence: " + .evidenceUrl else empty end'
+            [ "$status" = "PASS" ]
+          }
+
+          total_tests=2
+          passed_tests=0
+
+          if run_uat "V11-UAT-001" "$UAT_BASE_URL" ""; then
+            passed_tests=$((passed_tests + 1))
+          fi
+
+          if run_uat "V11-UAT-002" "$UAT_BASE_URL/actuator/health" "UP"; then
+            passed_tests=$((passed_tests + 1))
+          fi
+
+          failed_tests=$((total_tests - passed_tests))
+
+          echo "==> Real UAT summary: total=$total_tests passed=$passed_tests failed=$failed_tests"
+
+          echo "$total_tests" > "$RUNNER_TEMP/uat_total"
+          echo "$passed_tests" > "$RUNNER_TEMP/uat_passed"
+          echo "$failed_tests" > "$RUNNER_TEMP/uat_failed"
+
+      - name: Run V11 Quality Gate from real UAT results
+        timeout-minutes: 3
+        run: |
+          set -Eeuo pipefail
+
+          total_tests="$(cat "$RUNNER_TEMP/uat_total")"
+          passed_tests="$(cat "$RUNNER_TEMP/uat_passed")"
+          failed_tests="$(cat "$RUNNER_TEMP/uat_failed")"
+
+          echo "==> Executing V11 quality gate from real UAT execution"
           response="$(curl --connect-timeout 10 --max-time 30 -fsS \
             -X POST "$UAT_BASE_URL/api/quality-gate/evaluate" \
             -H 'Content-Type: application/json' \
-            --data '{
-              "totalTests": 1,
-              "passedTests": 1,
-              "failedTests": 0,
-              "automatedTests": 1,
-              "requirements": 1,
-              "coveredRequirements": 1
-            }')"
+            --data "$(jq -n \
+              --argjson total "$total_tests" \
+              --argjson passed "$passed_tests" \
+              --argjson failed "$failed_tests" \
+              '{
+                totalTests: $total,
+                passedTests: $passed,
+                failedTests: $failed,
+                automatedTests: $total,
+                requirements: 2,
+                coveredRequirements: $passed
+              }')")"
 
-          echo "$response"
+          echo "$response" | jq .
 
-          echo "$response" | grep -q '"decision":"APPROVED"' || {
+          decision="$(echo "$response" | jq -r '.decision // "UNKNOWN"')"
+          if [ "$decision" != "APPROVED" ]; then
             echo "ERROR: V11 quality gate BLOCKED the deployment"
             exit 1
-          }
+          fi
 
           echo "==> V11 quality gate APPROVED"
-          echo "==> Deployment verification complete"
+          echo "==> Real UAT execution -> Quality Gate -> CI/CD completed successfully"
