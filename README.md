@@ -1,4 +1,4 @@
-# AI QA Engineer — V2
+# AI QA Engineer — V3
 
 A build-first demo of an AI-driven QA/UAT automation platform.
 
@@ -8,55 +8,60 @@ Business Requirement → AI Requirement Analysis → structured test scenarios �
 ## V2 — Test Design Agent
 Business Requirement → AI Requirement Analysis → detailed executable test cases.
 
-V2 adds:
-- Functional, negative and boundary test design
-- Preconditions
-- Test steps
-- Test data guidance
-- Expected results
-- Automation-candidate flag
-- Acceptance-criteria traceability case
-- Dedicated V2 browser dashboard
+## V3 — Playwright Automation Agent
+Test case → automation request → generated Java + Playwright test skeleton.
+
+V3 adds:
+- Playwright Java dependency
+- Automation generation API: `POST /api/automation/generate`
+- Generated JUnit 5 + Playwright test class
+- UAT base URL input
+- Step-to-code mapping placeholders for the next AI locator phase
+- Dedicated V3 browser dashboard
 
 ## Stack
 - Java 21
 - Spring Boot 3.5.3
 - Maven
 - PostgreSQL 16
-- Docker / Docker Compose
+- Playwright for Java 1.52.0
 - OpenAI Responses API
+- Docker / Docker Compose
 - GitHub Actions
 
 ## Run
 ```bash
+git checkout v3-playwright-automation-agent
 docker compose up -d postgres
 mvn clean verify
 mvn spring-boot:run -pl ai-qa-api
 ```
 
-Open `http://localhost:8080/v2.html` for the V2 dashboard.
+Open `http://localhost:8080/v3.html` for the V3 dashboard.
 Health: `http://localhost:8080/actuator/health`
 
-Without `OPENAI_API_KEY`, the application uses deterministic demo output so the workflow can be tested without an API key. With AI, set `OPENAI_API_KEY` and optionally `OPENAI_MODEL`.
-
-## V2 API
-POST `/api/test-design/generate`
+## V3 API
+POST `/api/automation/generate`
 
 Example:
 ```json
 {
-  "title": "Password reset",
-  "description": "A registered customer can reset their password using their registered email address.",
-  "acceptanceCriteria": [
-    "Registered email receives a reset link",
-    "Invalid email displays an error",
-    "Reset link expires after 15 minutes"
-  ]
+  "testId": "TC-001",
+  "title": "Password reset happy path",
+  "url": "http://localhost:8081",
+  "steps": [
+    "Open the application",
+    "Enter registered email",
+    "Click reset password",
+    "Verify reset confirmation"
+  ],
+  "expectedResult": "A reset confirmation is displayed."
 }
 ```
 
-## Next versions
-V3 → Playwright Automation Agent
+The generated source intentionally marks locator/action mapping as TODO in V3. V3.1 will use AI to turn natural-language steps into Playwright locators and actions. V4 will add a dummy UAT application and real execution.
+
+## Roadmap
 V4 → Dummy UAT Application + Execution Agent
 V5 → Failure Analysis Agent
 V6 → Safe Self-Healing
