@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ai-qa-postgres
+    environment:
+      POSTGRES_DB: aiqa
+      POSTGRES_USER: aiqa
+      POSTGRES_PASSWORD: aiqa
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U aiqa -d aiqa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  ai-qa-api:
+    build: ./ai-qa-api
+    container_name: ai-qa-api
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/aiqa
+      DB_USER: aiqa
+      DB_PASSWORD: aiqa
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  postgres_data:
