@@ -16,9 +16,14 @@ jobs:
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
 
     steps:
+      - name: Checkout source for V12 impact analysis
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
       - name: Diagnose and deploy to EC2
         timeout-minutes: 8
         env:
@@ -132,12 +137,57 @@ jobs:
           exit 1
           REMOTE_SCRIPT
 
-      - name: Run real V11 UAT suite
+      - name: V12 change impact analysis
+        timeout-minutes: 2
+        run: |
+          set -Eeuo pipefail
+
+          base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          if [ -z "$base" ]; then
+            echo "No parent commit available; recommending full regression."
+            changed_files='["repository-baseline"]'
+            diff_text="initial repository baseline"
+          else
+            changed_files="$(git diff --name-only "$base" HEAD | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+            diff_text="$(git diff --unified=0 "$base" HEAD)"
+          fi
+
+          echo "==> Changed files: $changed_files"
+
+          payload="$(jq -n \
+            --argjson changedFiles "$changed_files" \
+            --arg diff "$diff_text" \
+            '{changedFiles:$changedFiles,diff:$diff}')"
+
+          response="$(curl --connect-timeout 10 --max-time 30 -fsS \
+            -X POST "$UAT_BASE_URL/api/impact-analysis/analyze" \
+            -H 'Content-Type: application/json' \
+            --data "$payload")"
+
+          echo "$response" | jq .
+          echo "$response" > "$RUNNER_TEMP/impact-analysis.json"
+
+          risk="$(echo "$response" | jq -r '.risk // "UNKNOWN"')"
+          score="$(echo "$response" | jq -r '.score // 100')"
+          full_regression="$(echo "$response" | jq -r '.fullRegressionRecommended // true')"
+          suites="$(echo "$response" | jq -r '(.recommendedSuites // []) | join(",")')"
+
+          echo "==> V12 impact risk: $risk (score=$score)"
+          echo "==> Recommended suites: $suites"
+          echo "==> Full regression recommended: $full_regression"
+
+          echo "V12_IMPACT_RISK=$risk" >> "$GITHUB_ENV"
+          echo "V12_IMPACT_SCORE=$score" >> "$GITHUB_ENV"
+          echo "V12_FULL_REGRESSION=$full_regression" >> "$GITHUB_ENV"
+
+      - name: Run real V11 UAT suite with V12 impact context
         timeout-minutes: 4
         run: |
           set -Eeuo pipefail
 
           echo "==> Target UAT: $UAT_BASE_URL"
+          echo "==> V12 impact risk: $V12_IMPACT_RISK ($V12_IMPACT_SCORE/100)"
+          echo "==> Full regression recommendation: $V12_FULL_REGRESSION"
           echo "==> Verifying public HTTPS health endpoint"
           health="$(curl --connect-timeout 10 --max-time 30 -fsS "$UAT_BASE_URL/actuator/health")"
           echo "$health"
@@ -200,7 +250,7 @@ jobs:
           passed_tests="$(cat "$RUNNER_TEMP/uat_passed")"
           failed_tests="$(cat "$RUNNER_TEMP/uat_failed")"
 
-          echo "==> Executing V11 quality gate from real UAT execution"
+          echo "==> Executing V11 quality gate from real UAT results"
           response="$(curl --connect-timeout 10 --max-time 30 -fsS \
             -X POST "$UAT_BASE_URL/api/quality-gate/evaluate" \
             -H 'Content-Type: application/json' \
@@ -226,4 +276,4 @@ jobs:
           fi
 
           echo "==> V11 quality gate APPROVED"
-          echo "==> Real UAT execution -> Quality Gate -> CI/CD completed successfully"
+          echo "==> V12 Impact Analysis -> V11 UAT -> Quality Gate -> CI/CD completed successfully"
