@@ -8,7 +8,11 @@ COPY ai-qa-api/src ai-qa-api/src
 
 RUN mvn -q -f ai-qa-api/pom.xml -DskipTests package
 
-FROM eclipse-temurin:21-jre
+# Playwright's official Java image includes the browser binaries and the
+# native OS dependencies required by Chromium. This keeps UAT execution
+# deterministic inside the deployed container instead of trying to install
+# browsers during every API request.
+FROM mcr.microsoft.com/playwright/java:v1.52.0-noble
 
 WORKDIR /app
 
