@@ -54,7 +54,7 @@ public class ImpactAnalysisService {
                 reasons.add(rawFile + " can change browser-visible behavior");
             }
             if (isExecutionOrAgent(file)) {
-                score += 35;
+                score += 45;
                 add(areas, "agent execution and orchestration");
                 add(suites, "agentic-uat-regression");
                 reasons.add(rawFile + " can change autonomous execution behavior");
