@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI QA Engineer V2</title>
+<style>body{font-family:Arial;max-width:1050px;margin:35px auto;padding:0 20px}textarea,input{width:100%;padding:10px;margin:6px 0 14px;box-sizing:border-box}button{padding:10px 18px;cursor:pointer}.card{border:1px solid #ddd;border-radius:10px;padding:20px;margin-bottom:20px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #ddd;padding:9px;vertical-align:top}th{background:#f5f5f5}pre{white-space:pre-wrap;background:#f4f4f4;padding:12px}</style>
+</head>
+<body>
+<h1>AI QA Engineer — V2</h1>
+<p><b>Requirement → AI analysis → detailed test design</b></p>
+<div class="card">
+<label>Requirement title</label><input id="title" value="Password reset">
+<label>Business requirement</label><textarea id="description" rows="4">A registered customer should be able to reset their password using their registered email address.</textarea>
+<label>Acceptance criteria</label><textarea id="criteria" rows="5">Registered email receives a reset link
+Invalid email displays an error
+Reset link expires after 15 minutes
+New password must follow password policy</textarea>
+<button onclick="generateTests()">Generate V2 Test Cases</button>
+</div>
+<div class="card"><h2>Test Design</h2><div id="summary"></div><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Priority</th><th>Preconditions</th><th>Steps</th><th>Test Data</th><th>Expected</th><th>Automation</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<script>
+async function generateTests(){
+ const payload={title:title.value,description:description.value,acceptanceCriteria:criteria.value.split('\n').map(x=>x.trim()).filter(Boolean)};
+ const r=await fetch('/api/test-design/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ const d=await r.json();
+ if(!r.ok){summary.textContent=JSON.stringify(d);return;}
+ summary.innerHTML='<p><b>Strategy:</b> '+d.strategy+'</p><p><b>Cases:</b> '+d.testCases.length+'</p>';
+ rows.innerHTML=d.testCases.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+t.type+'</td><td>'+t.priority+'</td><td>'+t.preconditions+'</td><td>'+t.steps.join('<br>')+'</td><td>'+t.testData+'</td><td>'+t.expectedResult+'</td><td>'+t.automationCandidate+'</td></tr>').join('');
+}
+</script></body></html>
