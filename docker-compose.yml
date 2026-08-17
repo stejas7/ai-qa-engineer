@@ -18,9 +18,7 @@ services:
       retries: 10
 
   ai-qa-api:
-    build:
-      context: .
-      dockerfile: ai-qa-api/Dockerfile
+    image: ${AI_QA_IMAGE:-ghcr.io/stejas7/ai-qa-engineer:latest}
     container_name: ai-qa-api
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/aiqa
