@@ -19,9 +19,10 @@ public class ExecutionController {
 
     @GetMapping("/evidence/{file}")
     public ResponseEntity<Resource> evidence(@PathVariable String file) throws Exception {
-        Path path = Path.of("evidence").resolve(file).normalize();
-        if (!path.startsWith(Path.of("evidence").toAbsolutePath())) return ResponseEntity.badRequest().build();
-        Resource resource = new UrlResource(path.toAbsolutePath().toUri());
+        Path root = Path.of("evidence").toAbsolutePath().normalize();
+        Path path = root.resolve(file).normalize();
+        if (!path.startsWith(root)) return ResponseEntity.badRequest().build();
+        Resource resource = new UrlResource(path.toUri());
         return resource.exists() ? ResponseEntity.ok().body(resource) : ResponseEntity.notFound().build();
     }
 }
