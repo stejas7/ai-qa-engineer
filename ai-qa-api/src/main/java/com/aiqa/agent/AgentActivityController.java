@@ -25,7 +25,7 @@ public class AgentActivityController {
 
     @GetMapping("/runs/{runId}/steps")
     public List<AgentStep> runSteps(@PathVariable UUID runId) {
-        return steps.findByAgentRunIdOrderBySequenceNoAsc(runId);
+        return steps.findByAgentRunIdOrderBySequenceNo(runId);
     }
 
     @GetMapping("/summary")
