@@ -23,7 +23,7 @@ jobs:
     name: Deploy Auravis to EC2
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 14
 
     steps:
       - name: Checkout tested commit
@@ -32,107 +32,107 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 1
 
-      - name: Deploy immutable image to EC2
-        timeout-minutes: 8
+      - name: Prepare SSH key
+        id: ssh_setup
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
         run: |
           set -Eeuo pipefail
           printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
           chmod 600 "$RUNNER_TEMP/ec2_key"
-          trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
 
-          SSH_OPTS=(
-            -o BatchMode=yes
-            -o ConnectTimeout=20
-            -o ConnectionAttempts=3
-            -o ServerAliveInterval=10
-            -o ServerAliveCountMax=6
-            -o StrictHostKeyChecking=no
-            -i "$RUNNER_TEMP/ec2_key"
-          )
-
-          retry_ssh() {
-            local attempts=3
-            local delay=10
-            local n=1
-            while [ "$n" -le "$attempts" ]; do
-              echo "==> SSH attempt $n/$attempts"
-              if timeout 75 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'; then
-                return 0
-              fi
-              if [ "$n" -lt "$attempts" ]; then
-                echo "SSH attempt $n failed; waiting ${delay}s before retry"
-                sleep "$delay"
-              fi
-              n=$((n+1))
-            done
-            echo "ERROR: EC2 SSH did not become ready after $attempts attempts"
-            return 1
-          }
-
-          echo "==> Checking TCP/22 connectivity to $EC2_HOST"
-          for i in 1 2 3; do
-            if timeout 20 bash -c 'cat < /dev/null > /dev/tcp/'"$EC2_HOST"'/22'; then
-              echo "TCP/22 reachable"
-              break
-            fi
-            if [ "$i" = 3 ]; then
-              echo "ERROR: TCP/22 is not reachable on EC2"
-              exit 1
-            fi
-            sleep 10
-          done
-
-          retry_ssh
-
-          echo "==> Authenticating EC2 to GHCR"
-          printf '%s' "$GHCR_TOKEN" | timeout 90 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
-
-          timeout 6m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<REMOTE_SCRIPT
+      - name: EC2 connectivity and disk preflight
+        id: preflight
+        timeout-minutes: 3
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
           set -Eeuo pipefail
-          cd ~/ai-qa-engineer
-          IMAGE='$IMAGE'
-          timeout 90 git fetch --prune origin main
-          git reset --hard origin/main
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
 
-          echo "==> Host status"
-          uptime || true
-          free -h || true
-          df -h /
-          df -i / || true
-
-          echo "==> Disk usage before cleanup"
-          sudo docker system df || true
-
-          sudo docker container prune -f || true
-          sudo docker image prune -af || true
-          timeout 240 sudo docker builder prune -af || true
-          sudo apt-get clean || true
-          sudo journalctl --vacuum-size=200M >/dev/null 2>&1 || true
-
-          echo "==> Disk usage after cleanup"
-          df -h /
-          sudo docker system df || true
-
-          available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
-          if [ "\$available_kb" -lt 3145728 ]; then
-            echo "ERROR: Less than 3GB free on / after safe cleanup"
-            sudo du -xhd1 /var /home 2>/dev/null | sort -h | tail -20 || true
+          if ! timeout 20 bash -c 'cat < /dev/null > /dev/tcp/'"$EC2_HOST"'/22'; then
+            echo "M8_FAILURE_CLASS=SSH_FAILURE"
+            echo "ERROR: TCP/22 is not reachable on EC2"
             exit 1
           fi
 
-          previous_image="\$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
-          timeout 5m sudo docker pull "\$IMAGE"
-          export AI_QA_IMAGE="\$IMAGE"
+          if ! timeout 75 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'; then
+            echo "M8_FAILURE_CLASS=SSH_FAILURE"
+            echo "ERROR: EC2 SSH did not become ready"
+            exit 1
+          fi
+
+          available_kb="$(ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "df --output=avail / | tail -1 | tr -d ' '")"
+          echo "EC2 free space: $((available_kb / 1024)) MB"
+          if [ "$available_kb" -lt 3145728 ]; then
+            echo "M8_FAILURE_CLASS=LOW_DISK"
+            echo "ERROR: Less than 3GB free on /. Run EC2 Disk Cleanup before redeploying."
+            exit 1
+          fi
+
+      - name: Deploy immutable image
+        id: image_deploy
+        timeout-minutes: 6
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -Eeuo pipefail
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+
+          if ! printf '%s' "$GHCR_TOKEN" | timeout 90 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"; then
+            echo "M8_FAILURE_CLASS=DOCKER_PULL_FAILURE"
+            echo "ERROR: GHCR authentication failed"
+            exit 1
+          fi
+
+          set +e
+          timeout 5m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "IMAGE='$IMAGE' bash -se" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+          cd ~/ai-qa-engineer
+          timeout 90 git fetch --prune origin main
+          git reset --hard origin/main
+
+          previous_image="$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
+          echo "$previous_image" >/tmp/auravis-previous-image
+
+          sudo docker container prune -f || true
+          sudo docker image prune -af || true
+          timeout 180 sudo docker builder prune -af || true
+
+          timeout 5m sudo docker pull "$IMAGE"
+          export AI_QA_IMAGE="$IMAGE"
           sudo -E docker compose up -d --remove-orphans
+          REMOTE_SCRIPT
+          rc=$?
+          set -e
+
+          if [ "$rc" -ne 0 ]; then
+            echo "M8_FAILURE_CLASS=DOCKER_PULL_FAILURE"
+            echo "ERROR: Docker image pull/start failed"
+            exit "$rc"
+          fi
+
+      - name: Verify local application and AI runtime
+        id: local_health
+        timeout-minutes: 3
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          set -Eeuo pipefail
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+
+          set +e
+          timeout 150 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+          cd ~/ai-qa-engineer
 
           healthy=false
-          for i in \$(seq 1 45); do
+          for i in $(seq 1 45); do
             if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null && grep -q '"status":"UP"' /tmp/health.json; then
               healthy=true
               break
@@ -140,32 +140,53 @@ jobs:
             sleep 2
           done
 
-          if [ "\$healthy" = true ]; then
-            cat /tmp/health.json
-            echo "==> Verifying Spring AI runtime endpoint"
-            curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8080/api/ai/runtime >/tmp/ai-runtime.json
-            cat /tmp/ai-runtime.json
-            grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json
-            sudo docker compose ps
-            sudo docker image prune -af || true
-            sudo docker logout ghcr.io >/dev/null 2>&1 || true
-            echo "==> Auravis backend deployment healthy"
-            exit 0
+          if [ "$healthy" != true ]; then
+            echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
+            sudo docker compose ps || true
+            sudo docker compose logs --tail=250 ai-qa-api || true
+            previous_image="$(cat /tmp/auravis-previous-image 2>/dev/null || true)"
+            if [ -n "$previous_image" ]; then
+              echo "Rolling back to previous image: $previous_image"
+              export AI_QA_IMAGE="$previous_image"
+              sudo -E docker compose up -d --remove-orphans
+            fi
+            exit 21
           fi
 
-          echo "ERROR: Auravis container failed health verification"
-          sudo docker compose ps || true
-          sudo docker compose logs --tail=250 ai-qa-api || true
-          if [ -n "\${previous_image:-}" ]; then
-            echo "==> Rolling back to previous image: \$previous_image"
-            export AI_QA_IMAGE="\$previous_image"
-            sudo -E docker compose up -d --remove-orphans
+          cat /tmp/health.json
+
+          if ! curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8080/api/ai/runtime >/tmp/ai-runtime.json; then
+            echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            exit 22
           fi
+          cat /tmp/ai-runtime.json
+          if ! grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json; then
+            echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            exit 22
+          fi
+
+          sudo docker compose ps
           sudo docker logout ghcr.io >/dev/null 2>&1 || true
-          exit 1
           REMOTE_SCRIPT
+          rc=$?
+          set -e
+
+          if [ "$rc" -eq 21 ]; then
+            echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
+            echo "ERROR: Auravis container failed health verification"
+            exit 1
+          elif [ "$rc" -eq 22 ]; then
+            echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            echo "ERROR: Spring AI/RAG runtime verification failed"
+            exit 1
+          elif [ "$rc" -ne 0 ]; then
+            echo "M8_FAILURE_CLASS=UNKNOWN"
+            echo "ERROR: Local UAT verification failed unexpectedly"
+            exit "$rc"
+          fi
 
       - name: Verify public health endpoint
+        id: public_health
         timeout-minutes: 2
         run: |
           set -Eeuo pipefail
@@ -177,19 +198,52 @@ jobs:
             fi
             sleep 4
           done
+          echo "M8_FAILURE_CLASS=PUBLIC_ENDPOINT_FAILURE"
           echo "ERROR: Public health endpoint did not report UP"
           exit 1
 
-      - name: Verify backend API contract and Spring AI runtime
+      - name: Verify public backend contracts
+        id: runtime_contract
         timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-          echo "==> Checking $PUBLIC_BASE_URL/api/pipeline/stats"
           curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/stats.json "$PUBLIC_BASE_URL/api/pipeline/stats"
           cat /tmp/stats.json
-          echo "==> Checking $PUBLIC_BASE_URL/api/ai/runtime"
-          curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/ai-runtime.json "$PUBLIC_BASE_URL/api/ai/runtime"
+          if ! curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/ai-runtime.json "$PUBLIC_BASE_URL/api/ai/runtime"; then
+            echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            exit 1
+          fi
           cat /tmp/ai-runtime.json
-          grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json
-          echo "==> Backend API and Spring AI runtime reachable"
+          grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json || {
+            echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            exit 1
+          }
           echo "==> DEPLOYMENT SUCCESS"
+
+      - name: M8 deployment diagnosis
+        if: ${{ always() }}
+        run: |
+          echo "## M8 Deployment Diagnosis" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.preflight.outcome }}" = "failure" ]; then
+            echo "**Classification:** SSH_FAILURE or LOW_DISK" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Check the preflight log. If disk is below 3GB, run EC2 Disk Cleanup; otherwise verify SSH/network access." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.image_deploy.outcome }}" = "failure" ]; then
+            echo "**Classification:** DOCKER_PULL_FAILURE" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Verify GHCR auth, image SHA/tag and package permissions." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.local_health.outcome }}" = "failure" ]; then
+            echo "**Classification:** APP_HEALTH_FAILURE or RAG_RUNTIME_FAILURE" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Review local health/runtime output and the captured backend logs; application rollback is attempted for health failures." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.public_health.outcome }}" = "failure" ]; then
+            echo "**Classification:** PUBLIC_ENDPOINT_FAILURE" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Verify DuckDNS, TLS/reverse proxy and public routing while localhost remains healthy." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.runtime_contract.outcome }}" = "failure" ]; then
+            echo "**Classification:** RAG_RUNTIME_FAILURE" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Verify Spring AI configuration, API credentials and RAG/vector dependencies." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**Classification:** SUCCESS" >> "$GITHUB_STEP_SUMMARY"
+            echo "Auravis UAT, public health and Spring AI runtime checks passed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Remove temporary SSH key
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/ec2_key"
