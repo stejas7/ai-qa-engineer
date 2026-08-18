@@ -1,191 +1,166 @@
-# AURAVIS 2.0.0 — Autonomous AI UAT Engineer
+# AURAVIS 2.0.0 — Autonomous AI UAT Engineer Backend
 
 > **From business requirement to release confidence — autonomously.**
 
-Auravis is an Autonomous AI UAT Engineer designed to take end-to-end ownership of software quality engineering activities that traditionally require dedicated QA execution roles.
+This repository contains the **Java / Spring Boot backend** for Auravis. The user interface has moved to the separate React repository: `stejas7/ai-qa-frontend`.
 
-Its long-term objective is to enable engineering organizations to operate with **minimal dependency on manual QA execution** by autonomously understanding business requirements, retrieving project knowledge, designing test scenarios, generating automation, executing UAT, diagnosing failures, safely self-healing eligible automation issues, performing regression validation, raising evidence-backed defects in engineering tools, and producing quality decisions.
+Auravis is a learning and AI engineering portfolio project that combines requirement intelligence, RAG, agentic orchestration, deterministic browser automation, persistence, evidence and cloud delivery around one end-to-end UAT problem.
 
-> **Auravis acts as an autonomous QA engineer inside the software delivery lifecycle — continuously understanding, testing, validating, diagnosing and protecting product quality with minimal human intervention.**
+## Architecture
 
-This is a learning and AI portfolio project. Capabilities are being implemented incrementally, with deterministic controls and explicit evidence rather than pretending unfinished roadmap items are production-ready.
+```text
+React / TypeScript frontend
+        |
+        | HTTPS / JSON
+        v
+Nginx on AWS EC2
+        |
+        | /api/*
+        v
+Spring Boot backend
+        |
+        +--> PostgreSQL 16
+        +--> RAG / knowledge
+        +--> Agent orchestration
+        +--> Playwright execution
+        +--> Evidence / analytics
+```
 
----
+The backend is intentionally API-first. Legacy Spring-served product pages and HTML-injection filters have been removed after the React migration.
 
 ## Product Mission
 
-The user provides a business requirement / BRD / PRD / user story and a UAT environment or registered Auravis application target. Auravis then owns the QA workflow.
+The user provides a business requirement / BRD / PRD / user story and a UAT target. Auravis aims to own the downstream QA workflow:
 
 ```text
-Business Requirement / BRD / PRD
-              +
-          UAT Target
-              │
-              ▼
+Business Requirement + UAT Target
+              |
+              v
        Knowledge Retrieval
-              │
-              ▼
+              |
+              v
     Requirement Intelligence
-              │
-              ▼
+              |
+              v
       Intelligent Test Design
-              │
-              ▼
+              |
+              v
         Playwright Execution
-              │
-       ┌──────┴──────┐
-       ▼             ▼
-     PASS           FAIL
-                       │
-                       ▼
-                Failure Diagnosis
-                       │
-                 ┌─────┴─────┐
-                 ▼           ▼
-          Automation issue  Genuine defect
-                 │           │
-                 ▼           ▼
-          Safe Self-Healing  Defect Management
-                 │           │
-                 ▼           ▼
-          Regression Re-run  Jira / GitHub Issues /
-                             Azure DevOps
-                 └─────┬─────┘
-                       ▼
-                Final QA Decision
-                       │
-                       ▼
-                Evidence + Report
+              |
+       +------+------+
+       |             |
+      PASS          FAIL
+                      |
+                      v
+               Failure Diagnosis
+                      |
+                +-----+-----+
+                |           |
+       Recoverable issue  Genuine defect
+                |           |
+                v           v
+        Safe Self-Healing  Defect Management
+                |           |
+                +-----+-----+
+                      |
+                      v
+              Final QA Decision
+                      |
+                      v
+               Evidence + Report
 ```
 
----
-
-## Auravis 2.0 Architecture
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           AURAVIS 2.0.0                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│ EXPERIENCE                                                              │
-│ Requirement upload • Application targets • Mission status • Evidence    │
-├─────────────────────────────────────────────────────────────────────────┤
-│ MISSION CONTROL                                                         │
-│ Mission state • Autonomous orchestration • Retry / recovery              │
-├─────────────────────────────────────────────────────────────────────────┤
-│ AI INTELLIGENCE                                                         │
-│ Requirement analysis • RAG • Test generation • Failure reasoning        │
-├─────────────────────────────────────────────────────────────────────────┤
-│ DETERMINISTIC EXECUTION                                                 │
-│ Java services • Playwright • Allowed actions • Assertions • Evidence    │
-├─────────────────────────────────────────────────────────────────────────┤
-│ INTEGRATIONS                                                            │
-│ Jira • GitHub Issues • Azure DevOps • CI/CD quality gates               │
-├─────────────────────────────────────────────────────────────────────────┤
-│ PERSISTENCE                                                             │
-│ PostgreSQL • Knowledge • Applications • Missions • Execution history    │
-├─────────────────────────────────────────────────────────────────────────┤
-│ DELIVERY                                                                │
-│ Maven • Docker • GHCR • GitHub Actions • AWS EC2 • Nginx • HTTPS        │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Engineering principle
+## Engineering Principle
 
 > **AI understands, plans and diagnoses. Java controls state and policy. Playwright executes. Evidence proves what happened.**
 
 Auravis does not give an LLM unrestricted shell, filesystem, database or deployment access. Real-world actions stay behind deterministic application services and controlled tool boundaries.
 
----
+## Roadmap
 
-## Auravis 2.0 Roadmap
+| Milestone | Capability | Status |
+|---|---|---|
+| M1 | Autonomous Mission | Implemented |
+| M2 | Knowledge / RAG Foundation | Implemented foundation |
+| M3 | Intelligent Test Generation | Implemented |
+| M4 | Advanced Automation & Multi-App Support | Implemented |
+| M5 | Agentic Orchestration | In progress |
+| M6 | Self-Healing & Smart Recovery | Planned |
+| M7 | Regression & Learning Intelligence | Planned |
+| M8 | Defect Management & Autonomous CI/CD Quality Gate | Planned |
 
-| Milestone | Capability | Status | Outcome |
-|---|---|---|---|
-| **M1** | Autonomous Mission | ✅ Implemented | Requirement → tests → automation → UAT → diagnosis |
-| **M2** | Knowledge / RAG Foundation | ✅ Implemented foundation | Project knowledge grounds QA reasoning |
-| **M3** | Intelligent Test Generation | ✅ Implemented | Business-rule, negative, boundary, risk and traceability coverage + Excel/JSON export |
-| **M4** | Advanced Automation & Multi-App Support | ✅ Implemented | Registered UAT targets, deterministic browser actions, execution history and evidence |
-| **M5** | Agentic Orchestration | 🔨 In progress | Specialized planning/execution/diagnosis agents coordinated inside one mission |
-| **M6** | Self-Healing & Smart Recovery | Planned | Safe locator healing, controlled retries and evidence-based repair |
-| **M7** | Regression & Learning Intelligence | Planned | Historical mission learning, failure patterns and targeted regression |
-| **M8** | Defect Management & Autonomous CI/CD Quality Gate | Planned | Classify genuine defects, create evidence-backed Jira/GitHub/Azure DevOps work items, prevent duplicates, and return an autonomous release recommendation |
-
-**Roadmap progress: 4 / 8 milestones complete (50%).**
-
-### M8 — Defect Management & Tool Integration
-
-Auravis will not create a defect simply because automation failed. M6/M7 intelligence first determines whether the failure is a recoverable automation problem, environment issue, flaky execution, or genuine product defect.
-
-For genuine defects, M8 is planned to support a provider-based integration layer:
-
-```text
-DefectManagementProvider
-        │
-        ├── JiraDefectProvider
-        ├── GitHubIssueProvider
-        └── AzureDevOpsDefectProvider
-```
-
-A generated defect can include requirement traceability, test case, expected vs actual result, severity/priority, environment, screenshot/evidence, diagnostic summary and Auravis mission ID. Duplicate detection should run before creating a new work item.
-
----
-
-## Current Capabilities
+## Backend Capabilities
 
 ### Requirement intelligence
 - business intent analysis
 - acceptance criteria extraction
 - OpenAI-compatible integration with deterministic fallback
+- requirement document parsing for TXT, Markdown, DOCX and PDF
 
-### Knowledge / RAG foundation
-- project knowledge persistence and retrieval
-- PostgreSQL + pgvector-ready storage
-- mission-time grounding before QA reasoning
+### Knowledge / RAG
+- persisted project knowledge
+- PostgreSQL-backed retrieval
+- pgvector-ready architecture
+- mission-time grounding
 
-### Intelligent test design
+### Test design and automation
 - functional, business-rule, negative, boundary and risk scenarios
 - requirement traceability
-- Excel and JSON download
+- Excel and JSON export
+- deterministic Playwright execution
+- application target registry
+- persisted execution history and evidence metadata
 
-### Automation & execution
-- Java + Playwright automation generation
-- deterministic browser action vocabulary and assertions
-- PASS / FAIL results, screenshots and evidence
-- persisted execution audit history
-- multi-application UAT target registry
+### Agentic orchestration
+- common agent contract
+- persisted AgentRun / AgentStep activity
+- policy and governance services
+- orchestration APIs and observability
 
-### Failure intelligence
-- failure classification
-- severity and probable cause
-- recommendation and retry signal
+### Failure and quality intelligence
+- failure classification and diagnosis
+- controlled retry / healing foundations
+- quality gate decision services
 
-### Delivery
-- Maven verification
-- Docker image build and GHCR publishing
-- AWS EC2 deployment
-- local/public health checks
-- rollback on unhealthy deployment
+### Product analytics
+- anonymous React page-view tracking
+- PostgreSQL persistence
+- unique visitor and daily traffic summaries
+- top-page and recent anonymous visit trace APIs
+- raw IP addresses are not stored
 
----
+## API Surface
 
-## Primary UI
+Main API groups include:
 
-- `/technology.html` — Engineering Showcase / Technology Behind Auravis
-- `/` — Auravis product overview and roadmap
-- `/auravis.html` — start an autonomous UAT mission
-- `/dashboard.html` — live mission dashboard and mission history
-- `/execution-center.html` — application registry, execution metrics and evidence history
-- `/real-world-impact.html` — real-world problem and future product impact
+```text
+/api/pipeline/*
+/api/applications/*
+/api/execution/*
+/api/agent-activity/*
+/api/analytics/*
+/api/knowledge/*
+/api/rag/*
+/api/quality-gate/*
+```
 
----
+Spring Boot health endpoint:
+
+```text
+/actuator/health
+```
+
+## Demo UAT Fixture
+
+`ai-qa-api/src/main/resources/static/uat/index.html` is intentionally retained as a small deterministic login target for local Playwright/UAT demonstrations. It is a test fixture, not the Auravis product UI.
 
 ## Technology Stack
 
-Java 17+ • Spring Boot 3.5.x • Maven • Spring Data JPA • PostgreSQL 16 • pgvector • Playwright for Java • OpenAI-compatible AI integration • Docker / Docker Compose • GitHub Actions • GHCR • AWS EC2 • Nginx + HTTPS
+Java 17+ • Spring Boot 3.5.x • Maven • Spring Data JPA • PostgreSQL 16 • pgvector-ready persistence • Playwright for Java • OpenAI-compatible AI integration • Apache POI • PDFBox • Docker / Docker Compose • GitHub Actions • GHCR • AWS EC2 • Nginx • HTTPS
 
----
+Frontend technology lives in `stejas7/ai-qa-frontend`: React • TypeScript • Vite • React Router • TanStack Query.
 
-## Run Locally
+## Run Backend Locally
 
 ```bash
 git clone https://github.com/stejas7/ai-qa-engineer.git
@@ -195,27 +170,23 @@ mvn clean verify
 mvn spring-boot:run -pl ai-qa-api
 ```
 
----
-
 ## Deployment
 
 ```text
-Commit to main → Maven verify → Docker image → GHCR → AWS EC2 → Health checks → UI smoke test → DEPLOYMENT SUCCESS
+Commit to main
+  -> Maven verify
+  -> Docker image
+  -> GHCR
+  -> AWS EC2
+  -> local health check
+  -> public health/API smoke check
+  -> deployment success
 ```
 
 Live environment: `https://auravis-uat.duckdns.org`
 
----
+The React frontend has its own CI/CD workflow and is deployed independently to the same EC2/Nginx environment.
 
-## Learning Value
+## Repository Boundary
 
-Auravis demonstrates an end-to-end Java → GenAI / Agentic AI engineering path:
-
-```text
-Java → Spring Boot → Structured AI Integration → RAG / Knowledge
-→ Intelligent Test Design → Playwright Execution → Evidence / Audit
-→ Agentic Orchestration → Self-Healing → Regression Intelligence
-→ Defect Management Integrations → Autonomous CI/CD Quality Gate → AWS
-```
-
-Every capability should move Auravis closer to **autonomous, explainable and safe UAT quality ownership from a business requirement**.
+This backend repository should contain only backend services, persistence, APIs, automation/runtime code, tests, deployment configuration, architecture documentation and intentional test fixtures. Product UI code belongs in `ai-qa-frontend`.
