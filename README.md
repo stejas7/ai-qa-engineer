@@ -84,8 +84,8 @@ Auravis does not give an LLM unrestricted shell, filesystem, database or deploym
 | M2 | Knowledge / RAG Foundation | Implemented foundation |
 | M3 | Intelligent Test Generation | Implemented |
 | M4 | Advanced Automation & Multi-App Support | Implemented |
-| M5 | Agentic Orchestration | In progress |
-| M6 | Self-Healing & Smart Recovery | Planned |
+| M5 | Agentic Orchestration | In progress — end-to-end orchestration wired |
+| M6 | Self-Healing & Smart Recovery | In progress — controlled execution healing wired |
 | M7 | Regression & Learning Intelligence | Planned |
 | M8 | Defect Management & Autonomous CI/CD Quality Gate | Planned |
 
@@ -116,10 +116,12 @@ Auravis does not give an LLM unrestricted shell, filesystem, database or deploym
 - persisted AgentRun / AgentStep activity
 - policy and governance services
 - orchestration APIs and observability
+- requirement → design → automation → execution → diagnosis → quality decision flow
 
 ### Failure and quality intelligence
 - failure classification and diagnosis
 - controlled retry / healing foundations
+- conservative self-healing policy
 - quality gate decision services
 
 ### Product analytics
@@ -129,26 +131,45 @@ Auravis does not give an LLM unrestricted shell, filesystem, database or deploym
 - top-page and recent anonymous visit trace APIs
 - raw IP addresses are not stored
 
-## API Surface
+## Backend API Reference
 
-Main API groups include:
-
-```text
-/api/pipeline/*
-/api/applications/*
-/api/execution/*
-/api/agent-activity/*
-/api/analytics/*
-/api/knowledge/*
-/api/rag/*
-/api/quality-gate/*
-```
-
-Spring Boot health endpoint:
+The live React product contains the human-readable API catalog at:
 
 ```text
-/actuator/health
+https://auravis-uat.duckdns.org/api-reference
 ```
+
+All product-facing API traffic is proxied by Nginx to the Spring Boot backend. Primary endpoints include:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/pipeline/upload` | Upload requirement file and start a mission |
+| GET | `/api/pipeline/runs` | Persisted mission history |
+| GET | `/api/pipeline/stats` | Mission processing metrics |
+| GET | `/api/pipeline/runs/{id}` | Mission detail and structured result |
+| GET | `/api/pipeline/runs/{id}/test-cases.json` | JSON test/result export |
+| GET | `/api/pipeline/runs/{id}/test-cases.xlsx` | Excel test export |
+| POST | `/api/execution/run` | Deterministic Playwright execution |
+| GET | `/api/execution/history` | Execution audit history |
+| GET | `/api/execution/stats` | PASS/FAIL execution metrics |
+| GET | `/api/execution/evidence/{file}` | Screenshot evidence |
+| GET | `/api/applications?activeOnly=true` | Active UAT application targets |
+| POST | `/api/applications` | Register UAT target |
+| PATCH | `/api/applications/{id}/active?value=true` | Activate/deactivate target |
+| GET | `/api/agent-activity/summary` | M5 orchestration summary |
+| GET | `/api/agent-activity/runs?limit=20` | Recent AgentRun history |
+| GET | `/api/agent-activity/runs/{runId}/steps` | Ordered AgentStep trace |
+| POST | `/api/healing/evaluate` | M6 healing policy evaluation |
+| GET | `/api/healing/history` | Persisted healing decisions |
+| GET | `/api/healing/stats` | M6 healing metrics |
+| POST | `/api/failure-analysis/analyze` | Failure diagnosis |
+| POST | `/api/quality-gate/evaluate` | Deterministic release decision |
+| POST | `/api/analytics/visit` | Anonymous page-view event |
+| GET | `/api/analytics/stats` | Visitor/page-view summary |
+| GET | `/api/analytics/recent` | Recent anonymous traffic trace |
+| GET | `/actuator/health` | Deployment/application health |
+
+Additional capability groups exist under `/api/knowledge/*` and `/api/rag/*` for project knowledge and retrieval-augmented reasoning.
 
 ## Demo UAT Fixture
 
