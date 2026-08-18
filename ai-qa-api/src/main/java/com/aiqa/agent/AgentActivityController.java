@@ -40,7 +40,8 @@ public class AgentActivityController {
         result.put("completed", completed);
         result.put("failed", failed);
         result.put("milestone", "M5");
-        result.put("status", "IN_PROGRESS");
+        result.put("status", "COMPLETED");
+        result.put("flow", List.of("REQUIREMENT_ANALYSIS", "TEST_DESIGN", "AUTOMATION_GENERATION", "UAT_EXECUTION", "FAILURE_DIAGNOSIS", "QUALITY_DECISION"));
         return result;
     }
 }
