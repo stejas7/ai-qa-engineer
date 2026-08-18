@@ -142,6 +142,10 @@ jobs:
 
           if [ "\$healthy" = true ]; then
             cat /tmp/health.json
+            echo "==> Verifying Spring AI runtime endpoint"
+            curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8080/api/ai/runtime >/tmp/ai-runtime.json
+            cat /tmp/ai-runtime.json
+            grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json
             sudo docker compose ps
             sudo docker image prune -af || true
             sudo docker logout ghcr.io >/dev/null 2>&1 || true
@@ -176,12 +180,16 @@ jobs:
           echo "ERROR: Public health endpoint did not report UP"
           exit 1
 
-      - name: Verify backend API contract
+      - name: Verify backend API contract and Spring AI runtime
         timeout-minutes: 1
         run: |
           set -Eeuo pipefail
           echo "==> Checking $PUBLIC_BASE_URL/api/pipeline/stats"
           curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/stats.json "$PUBLIC_BASE_URL/api/pipeline/stats"
           cat /tmp/stats.json
-          echo "==> Backend API reachable"
+          echo "==> Checking $PUBLIC_BASE_URL/api/ai/runtime"
+          curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/ai-runtime.json "$PUBLIC_BASE_URL/api/ai/runtime"
+          cat /tmp/ai-runtime.json
+          grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json
+          echo "==> Backend API and Spring AI runtime reachable"
           echo "==> DEPLOYMENT SUCCESS"
