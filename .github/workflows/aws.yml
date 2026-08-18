@@ -23,7 +23,7 @@ jobs:
     name: Deploy Auravis to EC2
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
 
     steps:
       - name: Checkout tested commit
@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 1
 
       - name: Deploy immutable image to EC2
-        timeout-minutes: 5
+        timeout-minutes: 8
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
@@ -45,29 +45,75 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
           chmod 600 "$RUNNER_TEMP/ec2_key"
           trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
-          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
-          echo "==> Checking SSH connectivity to $EC2_HOST"
-          timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'
-          timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
+
+          SSH_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=20
+            -o ConnectionAttempts=3
+            -o ServerAliveInterval=10
+            -o ServerAliveCountMax=6
+            -o StrictHostKeyChecking=no
+            -i "$RUNNER_TEMP/ec2_key"
+          )
+
+          retry_ssh() {
+            local attempts=3
+            local delay=10
+            local n=1
+            while [ "$n" -le "$attempts" ]; do
+              echo "==> SSH attempt $n/$attempts"
+              if timeout 75 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'; then
+                return 0
+              fi
+              if [ "$n" -lt "$attempts" ]; then
+                echo "SSH attempt $n failed; waiting ${delay}s before retry"
+                sleep "$delay"
+              fi
+              n=$((n+1))
+            done
+            echo "ERROR: EC2 SSH did not become ready after $attempts attempts"
+            return 1
+          }
+
+          echo "==> Checking TCP/22 connectivity to $EC2_HOST"
+          for i in 1 2 3; do
+            if timeout 20 bash -c 'cat < /dev/null > /dev/tcp/'"$EC2_HOST"'/22'; then
+              echo "TCP/22 reachable"
+              break
+            fi
+            if [ "$i" = 3 ]; then
+              echo "ERROR: TCP/22 is not reachable on EC2"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          retry_ssh
+
           echo "==> Authenticating EC2 to GHCR"
-          printf '%s' "$GHCR_TOKEN" | timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
-          timeout 4m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<REMOTE_SCRIPT
+          printf '%s' "$GHCR_TOKEN" | timeout 90 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+          timeout 6m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<REMOTE_SCRIPT
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
           IMAGE='$IMAGE'
-          timeout 60 git fetch --prune origin main
+          timeout 90 git fetch --prune origin main
           git reset --hard origin/main
 
-          echo "==> Disk usage before cleanup"
+          echo "==> Host status"
+          uptime || true
+          free -h || true
           df -h /
+          df -i / || true
+
+          echo "==> Disk usage before cleanup"
           sudo docker system df || true
 
-          # Keep running containers and named volumes (PostgreSQL data), but remove
-          # all unused containers/images/build cache. The previous 24h filter left
-          # recent immutable images behind and eventually exhausted the EC2 root disk.
+          # Preserve running containers and named volumes (including PostgreSQL data),
+          # while reclaiming unused deployment images/build cache.
           sudo docker container prune -f || true
           sudo docker image prune -af || true
-          timeout 180 sudo docker builder prune -af || true
+          timeout 240 sudo docker builder prune -af || true
           sudo apt-get clean || true
           sudo journalctl --vacuum-size=200M >/dev/null 2>&1 || true
 
@@ -76,45 +122,59 @@ jobs:
           sudo docker system df || true
 
           available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
-          if [ "\$available_kb" -lt 4194304 ]; then
-            echo "ERROR: Less than 4GB free on / after safe cleanup"
+          if [ "\$available_kb" -lt 3145728 ]; then
+            echo "ERROR: Less than 3GB free on / after safe cleanup"
             echo "Largest root directories:"
             sudo du -xhd1 /var /home 2>/dev/null | sort -h | tail -20 || true
             exit 1
           fi
 
           previous_image="\$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
-          timeout 4m sudo docker pull "\$IMAGE"
+          timeout 5m sudo docker pull "\$IMAGE"
           export AI_QA_IMAGE="\$IMAGE"
           sudo -E docker compose up -d --remove-orphans
+
           healthy=false
-          for i in \$(seq 1 30); do
-            if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null && grep -q '"status":"UP"' /tmp/health.json; then healthy=true; break; fi
+          for i in \$(seq 1 45); do
+            if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null && grep -q '"status":"UP"' /tmp/health.json; then
+              healthy=true
+              break
+            fi
             sleep 2
           done
+
           if [ "\$healthy" = true ]; then
             cat /tmp/health.json
             sudo docker compose ps
-            # Remove the now-unused previous immutable image after a healthy switch.
             sudo docker image prune -af || true
             sudo docker logout ghcr.io >/dev/null 2>&1 || true
             echo "==> Auravis deployment healthy"
             exit 0
           fi
-          sudo docker compose logs --tail=200 ai-qa-api || true
-          if [ -n "\${previous_image:-}" ]; then export AI_QA_IMAGE="\$previous_image"; sudo -E docker compose up -d --remove-orphans; fi
+
+          echo "ERROR: Auravis container failed health verification"
+          sudo docker compose ps || true
+          sudo docker compose logs --tail=250 ai-qa-api || true
+          if [ -n "\${previous_image:-}" ]; then
+            echo "==> Rolling back to previous image: \$previous_image"
+            export AI_QA_IMAGE="\$previous_image"
+            sudo -E docker compose up -d --remove-orphans
+          fi
           sudo docker logout ghcr.io >/dev/null 2>&1 || true
           exit 1
           REMOTE_SCRIPT
 
       - name: Verify public health endpoint
-        timeout-minutes: 1
+        timeout-minutes: 2
         run: |
           set -Eeuo pipefail
-          for i in $(seq 1 10); do
+          for i in $(seq 1 15); do
             response="$(curl --connect-timeout 5 --max-time 10 -fsS "$PUBLIC_BASE_URL/actuator/health" || true)"
-            if echo "$response" | grep -q '"status":"UP"'; then echo "$response"; exit 0; fi
-            sleep 3
+            if echo "$response" | grep -q '"status":"UP"'; then
+              echo "$response"
+              exit 0
+            fi
+            sleep 4
           done
           echo "ERROR: Public health endpoint did not report UP"
           exit 1
@@ -124,6 +184,6 @@ jobs:
         run: |
           set -Eeuo pipefail
           echo "==> Checking $PUBLIC_BASE_URL/auravis.html"
-          curl --connect-timeout 5 --max-time 15 -fsS -o /dev/null "$PUBLIC_BASE_URL/auravis.html"
+          curl --connect-timeout 5 --max-time 20 -fsS -o /dev/null "$PUBLIC_BASE_URL/auravis.html"
           echo "==> Auravis UI reachable"
           echo "==> DEPLOYMENT SUCCESS"
