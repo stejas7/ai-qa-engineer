@@ -39,7 +39,8 @@ public class HealingController {
         result.put("blocked", blocked);
         result.put("autoHealRate", total == 0 ? 0.0 : Math.round(allowed * 1000.0 / total) / 10.0);
         result.put("milestone", "M6");
-        result.put("status", "IN_PROGRESS");
+        result.put("status", "COMPLETED");
+        result.put("policy", "Recoverable automation failures only; confidence >= 0.90; one controlled retry; assertion/business failures are never auto-healed");
         return result;
     }
 
