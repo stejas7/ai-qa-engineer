@@ -31,9 +31,9 @@ public class AuravisUiConsistencyFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         if (!"GET".equalsIgnoreCase(request.getMethod())) return true;
         String path = request.getRequestURI();
-        return !("/".equals(path) || "/index.html".equals(path) || "/auravis.html".equals(path)
-                || "/dashboard.html".equals(path) || "/execution-center.html".equals(path)
-                || "/real-world-impact.html".equals(path));
+        return !("/".equals(path) || "/index.html".equals(path) || "/technology.html".equals(path)
+                || "/auravis.html".equals(path) || "/dashboard.html".equals(path)
+                || "/execution-center.html".equals(path) || "/real-world-impact.html".equals(path));
     }
 
     @Override
@@ -52,12 +52,12 @@ public class AuravisUiConsistencyFilter extends OncePerRequestFilter {
     private String enhancement() {
         return """
 <style>
-#auravis-global-nav{position:fixed;top:12px;right:18px;z-index:9000;display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;max-width:76vw;padding:6px;background:rgba(8,20,37,.96);border:1px solid #234469;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.25)}
-#auravis-global-nav a{color:#9bb0cc;text-decoration:none;font:700 11px Inter,system-ui,Arial;padding:7px 9px;border-radius:8px;border:1px solid transparent}#auravis-global-nav a:hover{color:#fff;background:#12355d}#auravis-global-nav a.active{color:#fff;background:#143a66;border-color:#299fff}#auravis-live-state{font:700 10px Inter,system-ui,Arial;color:#35e6ad;align-self:center;padding:0 5px}
+#auravis-global-nav{position:fixed;top:12px;right:18px;z-index:9000;display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;max-width:82vw;padding:6px;background:rgba(8,20,37,.96);border:1px solid #234469;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.25)}
+#auravis-global-nav a{color:#9bb0cc;text-decoration:none;font:700 11px Inter,system-ui,Arial;padding:7px 9px;border-radius:8px;border:1px solid transparent}#auravis-global-nav a:hover{color:#fff;background:#12355d}#auravis-global-nav a.active{color:#fff;background:#143a66;border-color:#299fff}#auravis-global-nav a.showcase{color:#35e6ad;border-color:#2b765c}#auravis-global-nav a.showcase.active{color:#07111f;background:linear-gradient(90deg,#35e6ad,#299fff);border-color:transparent}#auravis-live-state{font:700 10px Inter,system-ui,Arial;color:#35e6ad;align-self:center;padding:0 5px}
 @media(max-width:760px){#auravis-global-nav{position:relative;top:auto;right:auto;max-width:none;margin:10px;justify-content:center}}
 </style>
 <nav id="auravis-global-nav" aria-label="Auravis navigation">
-<a data-path="/" href="/">Overview</a><a data-path="/auravis.html" href="/auravis.html">New Mission</a><a data-path="/dashboard.html" href="/dashboard.html">Mission Dashboard</a><a data-path="/execution-center.html" href="/execution-center.html">Execution Center</a><a data-path="/real-world-impact.html" href="/real-world-impact.html">Knowledge & Impact</a><span id="auravis-live-state"></span>
+<a class="showcase" data-path="/technology.html" href="/technology.html">Engineering Showcase</a><a data-path="/" href="/">Overview</a><a data-path="/auravis.html" href="/auravis.html">New Mission</a><a data-path="/dashboard.html" href="/dashboard.html">Mission Dashboard</a><a data-path="/execution-center.html" href="/execution-center.html">Execution Center</a><a data-path="/real-world-impact.html" href="/real-world-impact.html">Knowledge & Impact</a><span id="auravis-live-state"></span>
 </nav>
 <script>(()=>{
  const path=(location.pathname==='/'||location.pathname==='/index.html')?'/':location.pathname;
