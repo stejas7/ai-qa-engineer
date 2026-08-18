@@ -103,16 +103,35 @@ jobs:
           sudo docker image prune -af || true
           timeout 180 sudo docker builder prune -af || true
 
-          timeout 5m sudo docker pull "$IMAGE"
+          if ! timeout 5m sudo docker pull "$IMAGE"; then
+            echo "M8_REMOTE_FAILURE=DOCKER_PULL_FAILURE"
+            exit 31
+          fi
+
           export AI_QA_IMAGE="$IMAGE"
-          sudo -E docker compose up -d --remove-orphans
+          if ! sudo -E docker compose up -d --remove-orphans; then
+            echo "M8_REMOTE_FAILURE=DOCKER_START_FAILURE"
+            echo "==> Docker compose status"
+            sudo docker compose ps || true
+            echo "==> Recent backend logs"
+            sudo docker compose logs --tail=200 ai-qa-api || true
+            exit 32
+          fi
           REMOTE_SCRIPT
           rc=$?
           set -e
 
-          if [ "$rc" -ne 0 ]; then
+          if [ "$rc" -eq 31 ]; then
             echo "M8_FAILURE_CLASS=DOCKER_PULL_FAILURE"
-            echo "ERROR: Docker image pull/start failed"
+            echo "ERROR: Docker image pull failed"
+            exit 1
+          elif [ "$rc" -eq 32 ]; then
+            echo "M8_FAILURE_CLASS=DOCKER_START_FAILURE"
+            echo "ERROR: Docker Compose failed to start Auravis; compose status and backend logs were captured above"
+            exit 1
+          elif [ "$rc" -ne 0 ]; then
+            echo "M8_FAILURE_CLASS=UNKNOWN"
+            echo "ERROR: Image deployment failed unexpectedly with remote exit code $rc"
             exit "$rc"
           fi
 
@@ -236,8 +255,8 @@ jobs:
             echo "**Classification:** SSH_FAILURE or LOW_DISK" >> "$GITHUB_STEP_SUMMARY"
             echo "**Action:** Check the preflight log. If disk is below 3GB, run EC2 Disk Cleanup; otherwise verify SSH/network access." >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.image_deploy.outcome }}" = "failure" ]; then
-            echo "**Classification:** DOCKER_PULL_FAILURE" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Action:** Verify GHCR auth, image SHA/tag and package permissions." >> "$GITHUB_STEP_SUMMARY"
+            echo "**Classification:** DOCKER_PULL_FAILURE, DOCKER_START_FAILURE or UNKNOWN" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Read the image deployment log. Pull failures point to GHCR/image availability; start failures now include docker compose status and recent ai-qa-api logs." >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.local_health.outcome }}" = "failure" ]; then
             echo "**Classification:** APP_HEALTH_FAILURE or RAG_RUNTIME_FAILURE" >> "$GITHUB_STEP_SUMMARY"
             echo "**Action:** Review local health/runtime output and captured backend logs; rollback to the previous image is attempted for both health and local AI runtime failures." >> "$GITHUB_STEP_SUMMARY"
