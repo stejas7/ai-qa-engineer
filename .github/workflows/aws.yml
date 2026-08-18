@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PUBLIC_BASE_URL: https://tejas-aiqa.duckdns.org
+  PUBLIC_BASE_URL: https://auravis-uat.duckdns.org
   IMAGE_NAME: ghcr.io/stejas7/ai-qa-engineer
 
 permissions:
