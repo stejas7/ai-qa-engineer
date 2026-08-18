@@ -8,10 +8,10 @@ import com.aiqa.execution.ExecutionService;
 import com.aiqa.failure.FailureAnalysisRequest;
 import com.aiqa.failure.FailureAnalysisResponse;
 import com.aiqa.failure.FailureAnalysisService;
+import com.aiqa.knowledge.KnowledgeService;
 import com.aiqa.requirement.AiRequirementService;
 import com.aiqa.requirement.Requirement;
 import com.aiqa.requirement.RequirementAnalysis;
-import com.aiqa.requirement.TestScenario;
 import com.aiqa.testdesign.TestCase;
 import com.aiqa.testdesign.TestDesignResponse;
 import com.aiqa.testdesign.TestDesignService;
@@ -21,10 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
-/** Coordinates Scorpion's autonomous V1-V5 QA pipeline without manual stage transitions. */
+/** Coordinates Scorpion's autonomous QA pipeline without manual stage transitions. */
 @Service
 public class ScorpionMissionOrchestrator {
     private final ScorpionMissionRepository missions;
+    private final KnowledgeService knowledgeService;
     private final AiRequirementService requirementService;
     private final TestDesignService testDesignService;
     private final PlaywrightAutomationService automationService;
@@ -33,12 +34,14 @@ public class ScorpionMissionOrchestrator {
 
     public ScorpionMissionOrchestrator(
             ScorpionMissionRepository missions,
+            KnowledgeService knowledgeService,
             AiRequirementService requirementService,
             TestDesignService testDesignService,
             PlaywrightAutomationService automationService,
             ExecutionService executionService,
             FailureAnalysisService failureAnalysisService) {
         this.missions = missions;
+        this.knowledgeService = knowledgeService;
         this.requirementService = requirementService;
         this.testDesignService = testDesignService;
         this.automationService = automationService;
@@ -46,7 +49,7 @@ public class ScorpionMissionOrchestrator {
         this.failureAnalysisService = failureAnalysisService;
     }
 
-    /** Runs requirement analysis, test design, automation generation, execution and failure analysis. */
+    /** Runs knowledge retrieval, requirement analysis, test design, automation, execution and failure analysis. */
     @Transactional
     public ScorpionMission run(UUID missionId) {
         ScorpionMission mission = missions.findById(missionId)
@@ -55,16 +58,22 @@ public class ScorpionMissionOrchestrator {
         missions.save(mission);
 
         try {
+            // V6: retrieve relevant enterprise/project knowledge before AI reasoning begins.
+            String knowledgeContext = knowledgeService.buildContext(mission.getRequirement(), 5);
+
             Requirement requirement = new Requirement();
             requirement.setTitle(mission.getTitle());
-            requirement.setDescription(mission.getRequirement());
+            String groundedDescription = knowledgeContext.isBlank()
+                    ? mission.getRequirement()
+                    : mission.getRequirement() + "\n\n" + knowledgeContext;
+            requirement.setDescription(groundedDescription);
             requirement.setAcceptanceCriteria(List.of(mission.getRequirement()));
 
-            // V1: understand the complete business requirement.
+            // V1: understand the complete business requirement using retrieved context when available.
             RequirementAnalysis analysis = requirementService.analyze(requirement);
             mission.requirementReady(analysis.summary());
 
-            // V2: convert the requirement into executable test cases.
+            // V2: convert the grounded requirement into executable test cases.
             TestDesignResponse design = testDesignService.design(requirement, analysis);
             List<TestCase> testCases = design.testCases();
             mission.scenarioCount(testCases.size());
@@ -85,7 +94,6 @@ public class ScorpionMissionOrchestrator {
                     FailureAnalysisResponse failure = failureAnalysisService.analyze(
                             new FailureAnalysisRequest(test.id(), execution.message(), test.expectedResult(),
                                     mission.getUatUrl(), execution.screenshot()));
-                    // Keep the concise diagnosis in the mission log through the final decision summary.
                     if (failure.retryRecommended()) {
                         mission.complete("QA requires retry: " + failure.probableCause());
                         return missions.save(mission);
