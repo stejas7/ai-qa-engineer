@@ -5,6 +5,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -67,6 +68,7 @@ public class PipelineController {
     }
 
     @GetMapping("/runs")
+    @Transactional(readOnly = true)
     public List<PipelineRunSummary> runs(@RequestParam(value = "company", required = false) String company) {
         List<PipelineRun> runs = (company == null || company.isBlank())
                 ? pipelineRunRepository.findAllByOrderByCreatedAtDesc()
@@ -75,6 +77,7 @@ public class PipelineController {
     }
 
     @GetMapping("/stats")
+    @Transactional(readOnly = true)
     public PipelineStats stats(@RequestParam(value = "company", required = false) String company) {
         List<PipelineRun> runs = (company == null || company.isBlank())
                 ? pipelineRunRepository.findAllByOrderByCreatedAtDesc()
@@ -89,6 +92,7 @@ public class PipelineController {
     }
 
     @GetMapping("/runs/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> run(@PathVariable UUID id) {
         return pipelineRunRepository.findById(id)
                 .<ResponseEntity<?>>map(r -> ResponseEntity.ok(PipelineRunDetail.of(r)))
@@ -97,6 +101,7 @@ public class PipelineController {
 
     /** Downloads the complete structured Auravis result as JSON. */
     @GetMapping("/runs/{id}/test-cases.json")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> downloadJson(@PathVariable UUID id) {
         return pipelineRunRepository.findById(id).map(run -> {
             if (!"COMPLETED".equalsIgnoreCase(run.getStatus()) || run.getResultJson() == null) {
@@ -113,6 +118,7 @@ public class PipelineController {
 
     /** Downloads generated test cases as an Excel workbook. */
     @GetMapping("/runs/{id}/test-cases.xlsx")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> downloadExcel(@PathVariable UUID id) {
         return pipelineRunRepository.findById(id).map(run -> {
             if (!"COMPLETED".equalsIgnoreCase(run.getStatus()) || run.getResultJson() == null) {
