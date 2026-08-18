@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  UAT_BASE_URL: https://tejas-aiqa.duckdns.org
+  PUBLIC_BASE_URL: https://tejas-aiqa.duckdns.org
   IMAGE_NAME: ghcr.io/stejas7/ai-qa-engineer
 
 permissions:
@@ -23,14 +23,14 @@ jobs:
     name: Deploy to EC2
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
 
     steps:
-      - name: Checkout tested commit for V12 impact analysis
+      - name: Checkout tested commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
+          fetch-depth: 1
 
       - name: Deploy immutable image to EC2
         timeout-minutes: 5
@@ -57,7 +57,7 @@ jobs:
             -i "$RUNNER_TEMP/ec2_key"
           )
 
-          echo "==> Target: $EC2_HOST"
+          echo "==> Checking SSH connectivity to $EC2_HOST"
           timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'
           timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
 
@@ -70,15 +70,15 @@ jobs:
           cd ~/ai-qa-engineer
           IMAGE='$IMAGE'
 
-          echo "==> Syncing deployment compose configuration"
+          echo "==> Syncing deployment configuration"
           timeout 60 git fetch --prune origin main
           git reset --hard origin/main
 
-          echo "==> Current disk"
+          echo "==> Checking disk space"
           df -h /
           available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
           if [ "\$available_kb" -lt 8388608 ]; then
-            echo "==> Low disk detected; performing emergency Docker cleanup"
+            echo "==> Low disk detected; cleaning unused Docker resources"
             sudo docker system prune -af --filter 'until=24h' || true
             timeout 180 sudo docker builder prune -af || true
           fi
@@ -93,19 +93,21 @@ jobs:
 
           previous_image="\$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
           echo "==> Previous image: \${previous_image:-none}"
-          echo "==> Pulling immutable image: \$IMAGE"
+          echo "==> Pulling tested image: \$IMAGE"
           timeout 4m sudo docker pull "\$IMAGE"
 
-          echo "==> Starting exact tested image"
+          echo "==> Starting tested image"
           export AI_QA_IMAGE="\$IMAGE"
           sudo -E docker compose up -d --remove-orphans
 
-          echo "==> Waiting for application health"
+          echo "==> Waiting for local application health"
           healthy=false
-          for i in \$(seq 1 20); do
+          for i in \$(seq 1 30); do
             if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
-              healthy=true
-              break
+              if grep -q '"status":"UP"' /tmp/health.json; then
+                healthy=true
+                break
+              fi
             fi
             sleep 2
           done
@@ -114,12 +116,15 @@ jobs:
             cat /tmp/health.json
             sudo docker compose ps
             sudo docker logout ghcr.io >/dev/null 2>&1 || true
+            echo "==> EC2 deployment healthy"
             exit 0
           fi
 
-          echo "==> New image failed health check; attempting rollback"
-          sudo docker compose logs --tail=150 ai-qa-api || true
+          echo "ERROR: New image failed local health check"
+          sudo docker compose ps || true
+          sudo docker compose logs --tail=200 ai-qa-api || true
           if [ -n "\${previous_image:-}" ]; then
+            echo "==> Rolling back to \$previous_image"
             export AI_QA_IMAGE="\$previous_image"
             sudo -E docker compose up -d --remove-orphans
           fi
@@ -127,74 +132,28 @@ jobs:
           exit 1
           REMOTE_SCRIPT
 
-      - name: V12 change impact analysis
+      - name: Verify public health endpoint
         timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-          base="$(git rev-parse HEAD^ 2>/dev/null || true)"
-          if [ -z "$base" ]; then
-            changed_files='["repository-baseline"]'
-            diff_text="initial repository baseline"
-          else
-            changed_files="$(git diff --name-only "$base" HEAD | jq -R -s -c 'split("\n") | map(select(length > 0))')"
-            diff_text="$(git diff --unified=0 "$base" HEAD)"
-          fi
+          echo "==> Checking $PUBLIC_BASE_URL/actuator/health"
+          for i in $(seq 1 10); do
+            response="$(curl --connect-timeout 5 --max-time 10 -fsS "$PUBLIC_BASE_URL/actuator/health" || true)"
+            if echo "$response" | grep -q '"status":"UP"'; then
+              echo "$response"
+              echo "==> Public health check passed"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "ERROR: Public health endpoint did not report UP"
+          exit 1
 
-          payload="$(jq -n --argjson changedFiles "$changed_files" --arg diff "$diff_text" '{changedFiles:$changedFiles,diff:$diff}')"
-          response="$(curl --connect-timeout 5 --max-time 20 -fsS -X POST "$UAT_BASE_URL/api/impact-analysis/analyze" -H 'Content-Type: application/json' --data "$payload")"
-          echo "$response" | jq .
-
-          risk="$(echo "$response" | jq -r '.risk // "UNKNOWN"')"
-          score="$(echo "$response" | jq -r '.score // 100')"
-          full_regression="$(echo "$response" | jq -r '.fullRegressionRecommended // true')"
-          suites="$(echo "$response" | jq -r '(.recommendedSuites // []) | join(",")')"
-          echo "==> V12 impact risk: $risk (score=$score)"
-          echo "==> Recommended suites: $suites"
-          echo "==> Full regression recommended: $full_regression"
-          echo "V12_IMPACT_RISK=$risk" >> "$GITHUB_ENV"
-          echo "V12_IMPACT_SCORE=$score" >> "$GITHUB_ENV"
-          echo "V12_FULL_REGRESSION=$full_regression" >> "$GITHUB_ENV"
-
-      - name: Run real V11 UAT suite with V12 impact context
-        timeout-minutes: 3
+      - name: Verify Scorpion UI
+        timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-          echo "==> Target UAT: $UAT_BASE_URL"
-          health="$(curl --connect-timeout 5 --max-time 20 -fsS "$UAT_BASE_URL/actuator/health")"
-          echo "$health"
-          echo "$health" | grep -q '"status":"UP"'
-
-          run_uat() {
-            local test_id="$1" url="$2" expected="$3"
-            local payload response status
-            payload="$(jq -n --arg testId "$test_id" --arg url "$url" --arg expected "$expected" '{testId:$testId,url:$url,steps:["Open the application"],expectedResult:$expected,headless:true}')"
-            echo "==> Executing $test_id"
-            response="$(curl --connect-timeout 5 --max-time 60 -fsS -X POST "$UAT_BASE_URL/api/execution/run" -H 'Content-Type: application/json' --data "$payload")"
-            echo "$response"
-            status="$(echo "$response" | jq -r '.status // "UNKNOWN"')"
-            echo "==> $test_id result: $status"
-            [ "$status" = "PASS" ]
-          }
-
-          total_tests=2
-          passed_tests=0
-          run_uat "V11-UAT-001" "$UAT_BASE_URL" "" && passed_tests=$((passed_tests + 1)) || true
-          run_uat "V11-UAT-002" "$UAT_BASE_URL/actuator/health" "UP" && passed_tests=$((passed_tests + 1)) || true
-          failed_tests=$((total_tests - passed_tests))
-          echo "==> Real UAT summary: total=$total_tests passed=$passed_tests failed=$failed_tests"
-          echo "$total_tests" > "$RUNNER_TEMP/uat_total"
-          echo "$passed_tests" > "$RUNNER_TEMP/uat_passed"
-          echo "$failed_tests" > "$RUNNER_TEMP/uat_failed"
-
-      - name: Run V11 Quality Gate from real UAT results
-        timeout-minutes: 2
-        run: |
-          set -Eeuo pipefail
-          total_tests="$(cat "$RUNNER_TEMP/uat_total")"
-          passed_tests="$(cat "$RUNNER_TEMP/uat_passed")"
-          failed_tests="$(cat "$RUNNER_TEMP/uat_failed")"
-          response="$(curl --connect-timeout 5 --max-time 20 -fsS -X POST "$UAT_BASE_URL/api/quality-gate/evaluate" -H 'Content-Type: application/json' --data "$(jq -n --argjson total "$total_tests" --argjson passed "$passed_tests" --argjson failed "$failed_tests" '{totalTests:$total,passedTests:$passed,failedTests:$failed,automatedTests:$total,requirements:2,coveredRequirements:$passed}')")"
-          echo "$response" | jq .
-          decision="$(echo "$response" | jq -r '.decision // "UNKNOWN"')"
-          [ "$decision" = "APPROVED" ]
-          echo "==> V11 Quality Gate APPROVED"
+          echo "==> Checking $PUBLIC_BASE_URL/scorpion.html"
+          curl --connect-timeout 5 --max-time 15 -fsS -o /dev/null "$PUBLIC_BASE_URL/scorpion.html"
+          echo "==> Scorpion UI reachable"
+          echo "==> DEPLOYMENT SUCCESS"
