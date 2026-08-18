@@ -44,6 +44,13 @@ class DeploymentFailureClassifierTest {
     }
 
     @Test
+    void classifiesRollbackFailureWithoutAutomaticRetry() {
+        DeploymentFailureDiagnosis result = classifier.classify("M8_ROLLBACK_STATUS=FAILED_RUNTIME_OR_HEALTH");
+        assertEquals(DeploymentFailureType.ROLLBACK_FAILURE, result.type());
+        assertFalse(result.retryRecommended());
+    }
+
+    @Test
     void classifiesApplicationHealthFailure() {
         DeploymentFailureDiagnosis result = classifier.classify("Auravis container failed health verification at /actuator/health");
         assertEquals(DeploymentFailureType.APP_HEALTH_FAILURE, result.type());
