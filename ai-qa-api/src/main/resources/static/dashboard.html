@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI QA Engineer — Dashboard</title>
+<title>Scorpion 2.0.0 — Mission Dashboard</title>
 <style>
 :root{--bg:#0b1020;--panel:#121a2d;--panel2:#18223a;--text:#eef3ff;--muted:#9aa8c7;--line:#273553;--accent:#7c8cff;--good:#36d399;--bad:#f76a6a;--warn:#f7c948}
 *{box-sizing:border-box}
@@ -81,20 +81,20 @@ pre{background:#090e1a;border:1px solid #202b44;border-radius:9px;padding:10px;f
 <body>
 <div class="app">
 <aside class="side">
-<div class="brand">AI <span>QA</span> Engineer</div>
-<div class="nav-group">Core QA</div><nav>
-<a href="/">Overview</a><a class="active" href="/dashboard.html">Live Dashboard</a><a href="/scorpion.html">Scorpion Autonomous QA</a>
+<div class="brand">🦂 <span>SCORPION</span></div>
+<div class="nav-group">Scorpion 2.0.0</div><nav>
+<a href="/">Overview</a><a href="/scorpion.html">New QA Mission</a><a class="active" href="/dashboard.html">Mission Dashboard</a>
 </nav>
 </aside>
 <main>
 <div class="top">
-<div class="eyebrow">Upload once. Everything else runs automatically.</div>
-<div class="title">QA Pipeline Dashboard</div>
-<div class="muted">Upload a business requirement file — the platform generates test cases, a test suite, automation and (optionally) executes it, then shows the quality gate decision here. Nothing to trigger manually.</div>
+<div class="eyebrow">SCORPION 2.0.0 • Upload once. Everything else runs automatically.</div>
+<div class="title">Autonomous QA Mission Dashboard</div>
+<div class="muted">Upload a business requirement file and Scorpion converts it into test cases, automation, UAT execution, evidence and a QA decision. Internal capabilities run as one mission — no legacy version pages and no manual stage switching.</div>
 </div>
 
 <div class="section card">
-<h2>Upload a business requirement</h2>
+<h2>Start a Scorpion mission from a requirement file</h2>
 <form id="uploadForm">
   <div id="dropzone">
     <div>Drag &amp; drop a requirement file here, or click to choose one</div>
@@ -104,18 +104,18 @@ pre{background:#090e1a;border:1px solid #202b44;border-radius:9px;padding:10px;f
   </div>
   <div class="upload-grid" style="margin-top:16px">
     <div>
-      <label>Target application URL (optional)</label>
-      <input type="text" id="targetUrl" placeholder="https://your-app.example.com/login">
+      <label>UAT application URL (optional)</label>
+      <input type="text" id="targetUrl" placeholder="https://your-uat-app.example.com/login">
     </div>
     <div>
-      <label>Company / tenant</label>
+      <label>Project / tenant</label>
       <input type="text" id="company" placeholder="default">
     </div>
     <div>
       <label>&nbsp;</label>
-      <div class="checkline"><input type="checkbox" id="executeAutomation" checked> Execute automation against the URL</div>
+      <div class="checkline"><input type="checkbox" id="executeAutomation" checked> Execute against UAT</div>
     </div>
-    <div><button type="submit" id="runBtn">Run pipeline</button></div>
+    <div><button type="submit" id="runBtn">Start Scorpion</button></div>
   </div>
 </form>
 </div>
@@ -137,12 +137,12 @@ pre{background:#090e1a;border:1px solid #202b44;border-radius:9px;padding:10px;f
 <div id="gateBanner"></div>
 <div class="metrics" id="metrics"></div>
 </div>
-<h2 style="margin-top:20px">Requirements → Tests → Automation → Execution</h2>
+<h2 style="margin-top:20px">Requirement → Tests → Automation → UAT → QA Decision</h2>
 <div id="requirementsList"></div>
 </div>
 
 <div class="section card">
-<h2>Recent runs</h2>
+<h2>Recent Scorpion missions</h2>
 <div class="runs-list" id="runsList"><div class="empty">Loading…</div></div>
 </div>
 
@@ -180,7 +180,7 @@ let pollTimer = null;
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!fileInput.files.length) return;
-  runBtn.disabled = true; runBtn.textContent = 'Uploading…';
+  runBtn.disabled = true; runBtn.textContent = 'Starting Scorpion…';
   errorBox.innerHTML = '';
 
   const fd = new FormData();
@@ -201,7 +201,7 @@ form.addEventListener('submit', async (e) => {
   } catch (err) {
     errorBox.innerHTML = '<div class="error-box">' + escapeHtml(err.message) + '</div>';
   } finally {
-    runBtn.disabled = false; runBtn.textContent = 'Run pipeline';
+    runBtn.disabled = false; runBtn.textContent = 'Start Scorpion';
   }
 });
 
@@ -218,7 +218,7 @@ function watchRun(runId) {
       loadRuns();
     } else if (run.status === 'FAILED') {
       clearInterval(pollTimer);
-      errorBox.innerHTML = '<div class="error-box">Pipeline failed: ' + escapeHtml(run.errorMessage || 'Unknown error') + '</div>';
+      errorBox.innerHTML = '<div class="error-box">Mission failed: ' + escapeHtml(run.errorMessage || 'Unknown error') + '</div>';
       spinner.style.display = 'none';
       loadRuns();
     }
@@ -246,7 +246,7 @@ function renderResults(result) {
   const approved = gate.decision === 'APPROVED';
   document.getElementById('gateBanner').innerHTML =
     '<div class="gate ' + (approved ? 'approved' : 'blocked') + '">' +
-    '<div><div class="muted">Quality Gate</div><div class="decision">' + gate.decision + '</div><div class="muted">' + escapeHtml(gate.reason) + '</div></div>' +
+    '<div><div class="muted">Scorpion QA Decision</div><div class="decision">' + gate.decision + '</div><div class="muted">' + escapeHtml(gate.reason) + '</div></div>' +
     '<div class="muted" style="text-align:right">Pass rate ' + gate.passRate + '%<br>Automation ' + gate.automationRate + '%<br>Requirement coverage ' + gate.requirementCoverage + '%</div>' +
     '</div>';
 
@@ -293,7 +293,7 @@ async function loadRuns() {
   const res = await fetch('/api/pipeline/runs');
   const runs = await res.json();
   const list = document.getElementById('runsList');
-  if (!runs.length) { list.innerHTML = '<div class="empty">No runs yet — upload a requirement file above.</div>'; return; }
+  if (!runs.length) { list.innerHTML = '<div class="empty">No Scorpion missions yet — upload a requirement file above.</div>'; return; }
   list.innerHTML = runs.map(r => `
     <div class="run-item" onclick="openRun('${r.id}')">
       <div><b>${escapeHtml(r.fileName)}</b><div class="muted">${escapeHtml(r.company)} · ${new Date(r.createdAt).toLocaleString()}</div></div>
