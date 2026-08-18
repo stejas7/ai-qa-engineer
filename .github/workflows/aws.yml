@@ -57,13 +57,32 @@ jobs:
           IMAGE='$IMAGE'
           timeout 60 git fetch --prune origin main
           git reset --hard origin/main
+
+          echo "==> Disk usage before cleanup"
+          df -h /
+          sudo docker system df || true
+
+          # Keep running containers and named volumes (PostgreSQL data), but remove
+          # all unused containers/images/build cache. The previous 24h filter left
+          # recent immutable images behind and eventually exhausted the EC2 root disk.
+          sudo docker container prune -f || true
+          sudo docker image prune -af || true
+          timeout 180 sudo docker builder prune -af || true
+          sudo apt-get clean || true
+          sudo journalctl --vacuum-size=200M >/dev/null 2>&1 || true
+
+          echo "==> Disk usage after cleanup"
+          df -h /
+          sudo docker system df || true
+
           available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
-          if [ "\$available_kb" -lt 8388608 ]; then
-            sudo docker system prune -af --filter 'until=24h' || true
-            timeout 180 sudo docker builder prune -af || true
+          if [ "\$available_kb" -lt 4194304 ]; then
+            echo "ERROR: Less than 4GB free on / after safe cleanup"
+            echo "Largest root directories:"
+            sudo du -xhd1 /var /home 2>/dev/null | sort -h | tail -20 || true
+            exit 1
           fi
-          available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
-          if [ "\$available_kb" -lt 4194304 ]; then echo "ERROR: Less than 4GB free on /"; exit 1; fi
+
           previous_image="\$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
           timeout 4m sudo docker pull "\$IMAGE"
           export AI_QA_IMAGE="\$IMAGE"
@@ -76,6 +95,8 @@ jobs:
           if [ "\$healthy" = true ]; then
             cat /tmp/health.json
             sudo docker compose ps
+            # Remove the now-unused previous immutable image after a healthy switch.
+            sudo docker image prune -af || true
             sudo docker logout ghcr.io >/dev/null 2>&1 || true
             echo "==> Auravis deployment healthy"
             exit 0
