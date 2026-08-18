@@ -1,5 +1,8 @@
 package com.aiqa.execution;
 
+import com.aiqa.healing.FailureCategory;
+import com.aiqa.healing.FailureClassifier;
+import com.aiqa.healing.HealingDecisionService;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.AriaRole;
 import com.microsoft.playwright.options.WaitUntilState;
@@ -12,55 +15,85 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Deterministic browser execution engine used by Auravis M4.
- * AI may design a test, while this service controls the allowed browser actions,
- * assertions, evidence capture and execution audit trail.
+ * Deterministic browser execution engine used by Auravis.
+ * M6 adds conservative self-healing: only recoverable automation failures may be
+ * retried, every decision is persisted, and business/assertion failures remain untouched.
+ *
+ * @author Tejas Shah
  */
 @Service
 public class ExecutionService {
     private final ExecutionRecordRepository records;
+    private final FailureClassifier failureClassifier;
+    private final HealingDecisionService healingDecisions;
 
-    public ExecutionService(ExecutionRecordRepository records) {
+    public ExecutionService(ExecutionRecordRepository records,
+                            FailureClassifier failureClassifier,
+                            HealingDecisionService healingDecisions) {
         this.records = records;
+        this.failureClassifier = failureClassifier;
+        this.healingDecisions = healingDecisions;
     }
 
     public ExecutionResponse run(ExecutionRequest request) {
         long start = System.currentTimeMillis();
         Path evidenceDir = Path.of("evidence");
-        String file = request.testId().replaceAll("[^A-Za-z0-9_-]", "_")
-                + "-" + UUID.randomUUID() + ".png";
+        String base = request.testId().replaceAll("[^A-Za-z0-9_-]", "_") + "-" + UUID.randomUUID();
+        String beforeFile = base + "-before.png";
+        String afterFile = base + "-after.png";
         Page page = null;
         try {
             Files.createDirectories(evidenceDir);
             try (Playwright playwright = Playwright.create()) {
                 boolean headless = request.headless() == null || request.headless();
-                try (Browser browser = playwright.chromium()
-                        .launch(new BrowserType.LaunchOptions().setHeadless(headless))) {
-                    try (BrowserContext context = browser.newContext()) {
-                        page = context.newPage();
-                        page.navigate(request.url(), new Page.NavigateOptions()
-                                .setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
-                        for (String step : request.steps() == null ? List.<String>of() : request.steps()) {
-                            perform(page, step);
-                        }
-                        if (request.expectedResult() != null && !request.expectedResult().isBlank()) {
-                            verify(page, request.expectedResult());
-                        }
-                        capture(page, evidenceDir.resolve(file));
+                try (Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(headless));
+                     BrowserContext context = browser.newContext()) {
+                    page = context.newPage();
+                    navigate(page, request.url());
+                    for (String step : request.steps() == null ? List.<String>of() : request.steps()) {
+                        executeWithHealing(page, request.testId(), step, evidenceDir, beforeFile);
                     }
+                    if (request.expectedResult() != null && !request.expectedResult().isBlank()) {
+                        verify(page, request.expectedResult());
+                    }
+                    capture(page, evidenceDir.resolve(afterFile));
                 }
             }
-            return persist(request, "PASS", start, file, "All supported steps and assertions completed.");
+            return persist(request, "PASS", start, afterFile, "Execution completed; controlled M6 healing applied only when policy allowed it.");
         } catch (Exception e) {
             try {
-                if (page != null && !page.isClosed()) capture(page, evidenceDir.resolve(file));
+                if (page != null && !page.isClosed()) capture(page, evidenceDir.resolve(afterFile));
             } catch (Exception ignored) { }
-            return persist(request, "FAIL", start, file, rootMessage(e));
+            return persist(request, "FAIL", start, afterFile, rootMessage(e));
         }
     }
 
-    private ExecutionResponse persist(ExecutionRequest request, String status, long start,
-                                      String file, String message) {
+    private void executeWithHealing(Page page, String testId, String step, Path evidenceDir, String beforeFile) {
+        try {
+            perform(page, step, false);
+        } catch (Exception firstFailure) {
+            String message = rootMessage(firstFailure);
+            FailureCategory category = failureClassifier.classify(message);
+            if (!category.isRecoverable()) {
+                healingDecisions.evaluate(testId, message, "No repair: protected failure category", 0.0);
+                throw firstFailure;
+            }
+
+            capture(page, evidenceDir.resolve(beforeFile));
+            String repair = repairDescription(category, step);
+            double confidence = healingConfidence(category);
+            HealingDecisionService.HealingDecision decision = healingDecisions.evaluate(testId, message, repair, confidence);
+            if (!"AUTO_HEAL_ALLOWED".equals(decision.decision())) throw firstFailure;
+
+            perform(page, step, true);
+        }
+    }
+
+    private void navigate(Page page, String url) {
+        page.navigate(url, new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+    }
+
+    private ExecutionResponse persist(ExecutionRequest request, String status, long start, String file, String message) {
         long duration = System.currentTimeMillis() - start;
         String evidence = "/api/execution/evidence/" + file;
         records.save(new ExecutionRecord(request.testId(), request.url(), status, duration, evidence, message));
@@ -71,14 +104,17 @@ public class ExecutionService {
         page.screenshot(new Page.ScreenshotOptions().setPath(destination.toAbsolutePath()).setFullPage(true));
     }
 
-    private void perform(Page page, String raw) {
+    private void perform(Page page, String raw, boolean healingRetry) {
         String step = raw == null ? "" : raw.trim();
         String lower = step.toLowerCase(Locale.ROOT);
         if (step.isBlank() || lower.startsWith("open ") || lower.equals("open the application")) return;
 
         List<String> quoted = quotedValues(step);
         if ((lower.startsWith("enter ") || lower.startsWith("fill ")) && quoted.size() >= 2) {
-            page.getByLabel(quoted.get(1), new Page.GetByLabelOptions().setExact(false)).fill(quoted.get(0));
+            String value = quoted.get(0);
+            String label = quoted.get(1);
+            if (healingRetry) page.getByPlaceholder(label, new Page.GetByPlaceholderOptions().setExact(false)).fill(value);
+            else page.getByLabel(label, new Page.GetByLabelOptions().setExact(false)).fill(value);
             return;
         }
         if (lower.startsWith("select ") && quoted.size() >= 2) {
@@ -90,16 +126,21 @@ public class ExecutionService {
             return;
         }
         if (lower.contains("enter email")) {
-            page.getByLabel("Email", new Page.GetByLabelOptions().setExact(false)).fill(valueInQuotes(step, "test@example.com"));
+            String value = valueInQuotes(step, "test@example.com");
+            if (healingRetry) page.locator("input[type=email]").first().fill(value);
+            else page.getByLabel("Email", new Page.GetByLabelOptions().setExact(false)).fill(value);
             return;
         }
         if (lower.contains("enter password")) {
-            page.getByLabel("Password", new Page.GetByLabelOptions().setExact(false)).fill(valueInQuotes(step, "Password123"));
+            String value = valueInQuotes(step, "Password123");
+            if (healingRetry) page.locator("input[type=password]").first().fill(value);
+            else page.getByLabel("Password", new Page.GetByLabelOptions().setExact(false)).fill(value);
             return;
         }
         if (lower.startsWith("click ")) {
             String label = !quoted.isEmpty() ? quoted.get(0) : step.substring(6).trim();
-            page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName(label).setExact(false)).click();
+            if (healingRetry) page.getByText(label, new Page.GetByTextOptions().setExact(false)).first().click();
+            else page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName(label).setExact(false)).click();
             return;
         }
         if (lower.startsWith("verify ")) {
@@ -109,13 +150,30 @@ public class ExecutionService {
         throw new IllegalArgumentException("Unsupported automation step: " + step);
     }
 
+    private String repairDescription(FailureCategory category, String step) {
+        return switch (category) {
+            case LOCATOR_FAILURE -> "Retry step with conservative semantic fallback locator: " + step;
+            case TIMEOUT -> "Retry the same deterministic step once after Playwright failure recovery: " + step;
+            case NAVIGATION_FAILURE -> "Retry deterministic browser action once; no URL mutation: " + step;
+            case TRANSIENT_BROWSER_FAILURE -> "Retry deterministic browser action once: " + step;
+            default -> "No repair";
+        };
+    }
+
+    private double healingConfidence(FailureCategory category) {
+        return switch (category) {
+            case LOCATOR_FAILURE -> 0.95;
+            case TIMEOUT -> 0.92;
+            case NAVIGATION_FAILURE, TRANSIENT_BROWSER_FAILURE -> 0.90;
+            default -> 0.0;
+        };
+    }
+
     private void verify(Page page, String expected) {
         String text = expected.replaceFirst("(?i)^verify\\s+", "").trim();
         if (text.toLowerCase(Locale.ROOT).startsWith("text ")) text = text.substring(5).trim();
         text = stripQuotes(text);
-        if (!text.isBlank()) {
-            page.getByText(text, new Page.GetByTextOptions().setExact(false)).first().waitFor();
-        }
+        if (!text.isBlank()) page.getByText(text, new Page.GetByTextOptions().setExact(false)).first().waitFor();
     }
 
     private List<String> quotedValues(String text) {
