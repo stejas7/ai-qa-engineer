@@ -1,4 +1,4 @@
-name: Deploy AI QA Engineer to AWS EC2
+name: Deploy Auravis to AWS EC2
 
 on:
   workflow_run:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to EC2
+    name: Deploy Auravis to EC2
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -42,92 +42,46 @@ jobs:
           IMAGE: ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
         run: |
           set -Eeuo pipefail
-
           printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
           chmod 600 "$RUNNER_TEMP/ec2_key"
           trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
-
-          SSH_OPTS=(
-            -o BatchMode=yes
-            -o ConnectTimeout=15
-            -o ConnectionAttempts=1
-            -o ServerAliveInterval=10
-            -o ServerAliveCountMax=3
-            -o StrictHostKeyChecking=no
-            -i "$RUNNER_TEMP/ec2_key"
-          )
-
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
           echo "==> Checking SSH connectivity to $EC2_HOST"
           timeout 20 bash -c 'cat < /dev/null > /dev/tcp/$EC2_HOST/22'
           timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH connection OK"'
-
           echo "==> Authenticating EC2 to GHCR"
-          printf '%s' "$GHCR_TOKEN" | timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" \
-            "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
-
+          printf '%s' "$GHCR_TOKEN" | timeout 30 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
           timeout 4m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<REMOTE_SCRIPT
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
           IMAGE='$IMAGE'
-
-          echo "==> Syncing deployment configuration"
           timeout 60 git fetch --prune origin main
           git reset --hard origin/main
-
-          echo "==> Checking disk space"
-          df -h /
           available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
           if [ "\$available_kb" -lt 8388608 ]; then
-            echo "==> Low disk detected; cleaning unused Docker resources"
             sudo docker system prune -af --filter 'until=24h' || true
             timeout 180 sudo docker builder prune -af || true
           fi
-
           available_kb="\$(df --output=avail / | tail -1 | tr -d ' ')"
-          available_gb=\$((available_kb / 1024 / 1024))
-          echo "==> Available root filesystem: \${available_gb}GB"
-          if [ "\$available_kb" -lt 4194304 ]; then
-            echo "ERROR: Less than 4GB free on /"
-            exit 1
-          fi
-
+          if [ "\$available_kb" -lt 4194304 ]; then echo "ERROR: Less than 4GB free on /"; exit 1; fi
           previous_image="\$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
-          echo "==> Previous image: \${previous_image:-none}"
-          echo "==> Pulling tested image: \$IMAGE"
           timeout 4m sudo docker pull "\$IMAGE"
-
-          echo "==> Starting tested image"
           export AI_QA_IMAGE="\$IMAGE"
           sudo -E docker compose up -d --remove-orphans
-
-          echo "==> Waiting for local application health"
           healthy=false
           for i in \$(seq 1 30); do
-            if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null; then
-              if grep -q '"status":"UP"' /tmp/health.json; then
-                healthy=true
-                break
-              fi
-            fi
+            if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null && grep -q '"status":"UP"' /tmp/health.json; then healthy=true; break; fi
             sleep 2
           done
-
           if [ "\$healthy" = true ]; then
             cat /tmp/health.json
             sudo docker compose ps
             sudo docker logout ghcr.io >/dev/null 2>&1 || true
-            echo "==> EC2 deployment healthy"
+            echo "==> Auravis deployment healthy"
             exit 0
           fi
-
-          echo "ERROR: New image failed local health check"
-          sudo docker compose ps || true
           sudo docker compose logs --tail=200 ai-qa-api || true
-          if [ -n "\${previous_image:-}" ]; then
-            echo "==> Rolling back to \$previous_image"
-            export AI_QA_IMAGE="\$previous_image"
-            sudo -E docker compose up -d --remove-orphans
-          fi
+          if [ -n "\${previous_image:-}" ]; then export AI_QA_IMAGE="\$previous_image"; sudo -E docker compose up -d --remove-orphans; fi
           sudo docker logout ghcr.io >/dev/null 2>&1 || true
           exit 1
           REMOTE_SCRIPT
@@ -136,24 +90,19 @@ jobs:
         timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-          echo "==> Checking $PUBLIC_BASE_URL/actuator/health"
           for i in $(seq 1 10); do
             response="$(curl --connect-timeout 5 --max-time 10 -fsS "$PUBLIC_BASE_URL/actuator/health" || true)"
-            if echo "$response" | grep -q '"status":"UP"'; then
-              echo "$response"
-              echo "==> Public health check passed"
-              exit 0
-            fi
+            if echo "$response" | grep -q '"status":"UP"'; then echo "$response"; exit 0; fi
             sleep 3
           done
           echo "ERROR: Public health endpoint did not report UP"
           exit 1
 
-      - name: Verify Scorpion UI
+      - name: Verify Auravis UI
         timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-          echo "==> Checking $PUBLIC_BASE_URL/scorpion.html"
-          curl --connect-timeout 5 --max-time 15 -fsS -o /dev/null "$PUBLIC_BASE_URL/scorpion.html"
-          echo "==> Scorpion UI reachable"
+          echo "==> Checking $PUBLIC_BASE_URL/auravis.html"
+          curl --connect-timeout 5 --max-time 15 -fsS -o /dev/null "$PUBLIC_BASE_URL/auravis.html"
+          echo "==> Auravis UI reachable"
           echo "==> DEPLOYMENT SUCCESS"
