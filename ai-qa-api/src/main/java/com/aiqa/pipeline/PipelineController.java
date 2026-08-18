@@ -97,12 +97,33 @@ public class PipelineController {
         return runs.stream().map(PipelineRunSummary::of).toList();
     }
 
+    /** Returns operational counters used by the Auravis dashboard. */
+    @GetMapping("/stats")
+    public PipelineStats stats(@RequestParam(value = "company", required = false) String company) {
+        List<PipelineRun> runs = (company == null || company.isBlank())
+                ? pipelineRunRepository.findAllByOrderByCreatedAtDesc()
+                : pipelineRunRepository.findByCompanyOrderByCreatedAtDesc(company.trim());
+
+        long uploaded = runs.size();
+        long completed = runs.stream().filter(r -> "COMPLETED".equalsIgnoreCase(r.getStatus())).count();
+        long failed = runs.stream().filter(r -> "FAILED".equalsIgnoreCase(r.getStatus())).count();
+        long processed = completed + failed;
+        long processing = uploaded - processed;
+        double completionRate = uploaded == 0 ? 0.0 : (processed * 100.0) / uploaded;
+
+        return new PipelineStats(uploaded, processed, completed, failed, processing,
+                Math.round(completionRate * 10.0) / 10.0);
+    }
+
     @GetMapping("/runs/{id}")
     public ResponseEntity<?> run(@PathVariable UUID id) {
         return pipelineRunRepository.findById(id)
                 .<ResponseEntity<?>>map(r -> ResponseEntity.ok(PipelineRunDetail.of(r)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
+
+    public record PipelineStats(long uploaded, long processed, long completed, long failed,
+                                long processing, double completionRate) {}
 
     public record PipelineRunSummary(UUID id, String company, String fileName, String status,
                                       String currentStage, Object createdAt, Object completedAt) {
