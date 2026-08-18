@@ -21,7 +21,7 @@ permissions:
 jobs:
   deploy:
     name: Deploy Auravis to EC2
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 14
 
