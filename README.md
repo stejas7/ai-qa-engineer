@@ -4,7 +4,7 @@
 
 This repository contains the **Java / Spring Boot backend** for Auravis. The user interface lives in the separate React repository: `stejas7/ai-qa-frontend`.
 
-Auravis is a learning and AI engineering portfolio project that combines requirement intelligence, RAG, agentic orchestration, deterministic browser automation, controlled self-healing, persistence, evidence and cloud delivery around one end-to-end UAT problem.
+Auravis is a learning and AI engineering portfolio project that combines requirement intelligence, Spring AI, RAG, agentic orchestration, deterministic browser automation, controlled self-healing, persistence, evidence and cloud delivery around one end-to-end UAT problem.
 
 ## Architecture
 
@@ -17,7 +17,13 @@ Nginx on AWS EC2
         |
         | /api/*
         v
-Spring Boot backend
+Spring Boot 3.5 backend
+        |
+        +--> Spring AI 1.1.8 ChatClient
+        |      +--> Requirement Intelligence
+        |      +--> Failure Diagnosis
+        |      +--> OpenAI model integration
+        |      +--> deterministic Java fallback
         |
         +--> PostgreSQL 16
         +--> RAG / knowledge
@@ -29,6 +35,29 @@ Spring Boot backend
 
 The backend is intentionally API-first. Legacy Spring-served product pages and HTML-injection filters have been removed after the React migration.
 
+## Spring AI Runtime
+
+Auravis now uses **Spring AI 1.1.8** as the Java-native model integration layer. The previous hand-written OpenAI `HttpClient` calls in requirement intelligence and failure diagnosis have been removed and replaced with Spring AI `ChatClient`.
+
+Why 1.1.8 instead of 2.0.x: Auravis currently runs Spring Boot 3.5.x. Spring AI 1.1.x supports the Spring Boot 3.5 generation, while Spring AI 2.0.x targets Spring Boot 4.x. A Boot 4 / Spring AI 2 migration can therefore be handled as a deliberate platform upgrade rather than mixing incompatible framework generations.
+
+Runtime configuration:
+
+```text
+OPENAI_API_KEY=<secret>
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+When a real model credential is unavailable or the provider call fails, Auravis remains operational through deterministic Java fallback logic. The deployment pipeline verifies both `/actuator/health` and `/api/ai/runtime` before declaring the backend healthy.
+
+Safe runtime metadata:
+
+```text
+GET /api/ai/runtime
+```
+
+The endpoint exposes the Spring AI framework/version, provider, configured model and whether a real model credential is present. It never exposes the API key.
+
 ## Product Mission
 
 ```text
@@ -38,7 +67,7 @@ Business Requirement + UAT Target
        Knowledge Retrieval
               |
               v
-    Requirement Intelligence
+ Spring AI Requirement Intelligence
               |
               v
       Intelligent Test Design
@@ -54,7 +83,7 @@ Business Requirement + UAT Target
       PASS          FAIL
                       |
                       v
-               Failure Diagnosis
+          Spring AI Failure Diagnosis
                       |
                 +-----+-----+
                 |           |
@@ -72,7 +101,7 @@ Business Requirement + UAT Target
 
 ## Engineering Principle
 
-> **AI understands, plans and diagnoses. Java controls state and policy. Playwright executes. Evidence proves what happened.**
+> **Spring AI understands and reasons. Java controls state and policy. Playwright executes. Evidence proves what happened.**
 
 ## Roadmap
 
@@ -84,7 +113,7 @@ Business Requirement + UAT Target
 | M4 | Advanced Automation & Multi-App Support | ✅ Implemented |
 | M5 | Agentic Orchestration | ✅ Complete |
 | M6 | Self-Healing & Smart Recovery | ✅ Complete |
-| M7 | Regression & Learning Intelligence | 🔨 In progress |
+| M7 | Spring AI Runtime + Regression & Learning Intelligence | 🔨 In progress |
 | M8 | Defect Management & Autonomous CI/CD Quality Gate | Planned |
 
 **Roadmap progress: 6 / 8 milestones complete (75%).**
@@ -102,7 +131,7 @@ REQUIREMENT_ANALYSIS
   -> QUALITY_DECISION
 ```
 
-The orchestration layer records state and decisions, while deterministic Java services perform the actual browser execution and quality evaluation.
+The orchestration layer records state and decisions, while deterministic Java services perform actual browser execution and quality evaluation.
 
 ## M6 — Controlled Self-Healing
 
@@ -121,10 +150,18 @@ Safety rules:
 
 ## Backend Capabilities
 
+### Spring AI intelligence
+- Spring AI 1.1.8 BOM and OpenAI model starter
+- `ChatClient`-based requirement intelligence
+- `ChatClient`-based failure diagnosis
+- configurable OpenAI model through environment variables
+- deterministic Java fallback when model calls are unavailable
+- safe `/api/ai/runtime` diagnostics
+
 ### Requirement intelligence
 - business intent analysis
 - acceptance criteria extraction
-- OpenAI-compatible integration with deterministic fallback
+- Spring AI model integration with deterministic fallback
 - TXT, Markdown, DOCX and PDF parsing
 
 ### Knowledge / RAG
@@ -153,7 +190,7 @@ Safety rules:
 - one bounded retry
 - persisted healing history and metrics
 - React Self-Healing observability page
-- failure diagnosis and deterministic quality gate
+- Spring AI failure diagnosis with deterministic quality gate
 
 ### Product analytics
 - anonymous React page-view tracking
@@ -174,6 +211,7 @@ Primary endpoints include:
 
 | Method | Endpoint | Purpose |
 |---|---|---|
+| GET | `/api/ai/runtime` | Spring AI runtime metadata and model configuration status |
 | POST | `/api/pipeline/upload` | Upload requirement file and start a mission |
 | GET | `/api/pipeline/runs` | Persisted mission history |
 | GET | `/api/pipeline/stats` | Mission processing metrics |
@@ -191,7 +229,7 @@ Primary endpoints include:
 | POST | `/api/healing/evaluate` | M6 healing policy evaluation |
 | GET | `/api/healing/history` | Persisted healing decisions |
 | GET | `/api/healing/stats` | M6 healing metrics and policy status |
-| POST | `/api/failure-analysis/analyze` | Failure diagnosis |
+| POST | `/api/failure-analysis/analyze` | Spring AI failure diagnosis |
 | POST | `/api/quality-gate/evaluate` | Deterministic release decision |
 | GET | `/api/applications?activeOnly=true` | Active UAT application targets |
 | POST | `/api/applications` | Register UAT target |
@@ -212,7 +250,7 @@ Maven verification includes tests for core quality-gate, agent-policy, impact-an
 
 ## Technology Stack
 
-Java 17+ • Spring Boot 3.5.x • Maven • Spring Data JPA • PostgreSQL 16 • pgvector-ready persistence • Playwright for Java • OpenAI-compatible AI integration • Apache POI • PDFBox • Docker / Docker Compose • GitHub Actions • GHCR • AWS EC2 • Nginx • HTTPS
+Java 17+ • Spring Boot 3.5.x • **Spring AI 1.1.8** • `ChatClient` • Maven • Spring Data JPA • PostgreSQL 16 • pgvector-ready persistence • Playwright for Java • OpenAI model integration • Apache POI • PDFBox • Docker / Docker Compose • GitHub Actions • GHCR • AWS EC2 • Nginx • HTTPS
 
 Frontend: React • TypeScript • Vite • React Router • TanStack Query.
 
@@ -226,6 +264,13 @@ mvn clean verify
 mvn spring-boot:run -pl ai-qa-api
 ```
 
+To use the real AI model locally:
+
+```bash
+export OPENAI_API_KEY=<your-key>
+export OPENAI_MODEL=gpt-4.1-mini
+```
+
 ## Deployment
 
 ```text
@@ -234,8 +279,9 @@ Commit to main
   -> Docker image
   -> GHCR
   -> AWS EC2
-  -> local health check
-  -> public health/API smoke check
+  -> /actuator/health
+  -> /api/ai/runtime
+  -> public API smoke checks
   -> deployment success
 ```
 
