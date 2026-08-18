@@ -8,7 +8,7 @@ Its long-term objective is to enable engineering organizations to operate with *
 
 > **Auravis acts as an autonomous QA engineer inside the software delivery lifecycle — continuously understanding, testing, validating, diagnosing and protecting product quality with minimal human intervention.**
 
-The goal is not simply test automation. Auravis is being engineered toward **autonomous ownership of the QA lifecycle**, while retaining deterministic controls, evidence, auditability and explicit approval boundaries for sensitive actions.
+This is a learning and AI portfolio project. Capabilities are being implemented incrementally, with deterministic controls and explicit evidence rather than pretending unfinished roadmap items are production-ready.
 
 ---
 
@@ -17,14 +17,14 @@ The goal is not simply test automation. Auravis is being engineered toward **aut
 The user provides:
 
 1. a complete business requirement / BRD / PRD / user story, and
-2. a UAT environment URL.
+2. a UAT environment or a registered Auravis application target.
 
 Auravis then owns the QA workflow.
 
 ```text
 Business Requirement / BRD / PRD
               +
-          UAT URL
+          UAT Target
               │
               ▼
       ┌────────────────────┐
@@ -42,10 +42,10 @@ Business Requirement / BRD / PRD
       Intelligent Test Design
                 │
                 ▼
-      Automation Generation
+     Executable Test Planning
                 │
                 ▼
-          UAT Execution
+        Playwright Execution
                 │
          ┌──────┴──────┐
          ▼             ▼
@@ -76,7 +76,7 @@ Business Requirement / BRD / PRD
 │                           AURAVIS 2.0.0                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ EXPERIENCE                                                              │
-│ Requirement upload • UAT URL • Mission status • Evidence • QA decision  │
+│ Requirement upload • Application targets • Mission status • Evidence    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ MISSION CONTROL                                                         │
 │ Mission state • Autonomous orchestration • Retry / recovery              │
@@ -85,13 +85,13 @@ Business Requirement / BRD / PRD
 │ Requirement analysis • RAG • Test generation • Failure reasoning        │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ DETERMINISTIC EXECUTION                                                 │
-│ Java services • Playwright • Policy boundaries • Evidence capture       │
+│ Java services • Playwright • Allowed actions • Assertions • Evidence    │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ KNOWLEDGE                                                               │
-│ PostgreSQL • pgvector-ready knowledge • requirements • mission history  │
+│ PERSISTENCE                                                             │
+│ PostgreSQL • Knowledge • Applications • Missions • Execution history    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ DELIVERY                                                                │
-│ Maven • Docker • GHCR • GitHub Actions • AWS EC2 • HTTPS                │
+│ Maven • Docker • GHCR • GitHub Actions • AWS EC2 • Nginx • HTTPS        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,52 +103,69 @@ Auravis does not give an LLM unrestricted shell, filesystem, database or deploym
 
 ---
 
-## Autonomous UAT Flow
-
-```text
-Requirement
-    ↓
-Knowledge / RAG
-    ↓
-Requirement Intelligence
-    ↓
-Intelligent Test Generation
-    ↓
-Automation Generation
-    ↓
-UAT Execution
-    ↓
-Failure Diagnosis
-    ↓
-Safe Self-Healing
-    ↓
-Regression Re-run
-    ↓
-Final QA Decision
-```
-
-Target operating model:
-
-- no manual test-case writing
-- no manual automation coding
-- no manual execution
-- no manual result analysis
-- minimal dependency on dedicated QA execution roles
-
----
-
 ## Auravis 2.0 Roadmap
 
 | Milestone | Capability | Status | Outcome |
 |---|---|---|---|
-| **M1** | Autonomous Mission | Implemented | Requirement → tests → automation → UAT → diagnosis |
-| **M2** | Knowledge / RAG Foundation | Implemented foundation | Project knowledge grounds QA reasoning |
-| **M3** | Intelligent Test Generation | Next | Business-flow, risk, negative, boundary and traceability coverage |
-| **M4** | Advanced Automation & Multi-App Support | Planned | Richer browser/API/mobile-ready execution model |
-| **M5** | Agentic Orchestration | Planned | Specialized agents coordinated inside one mission |
+| **M1** | Autonomous Mission | ✅ Implemented | Requirement → tests → automation → UAT → diagnosis |
+| **M2** | Knowledge / RAG Foundation | ✅ Implemented foundation | Project knowledge grounds QA reasoning |
+| **M3** | Intelligent Test Generation | ✅ Implemented | Business-rule, negative, boundary, risk and traceability coverage + Excel/JSON export |
+| **M4** | Advanced Automation & Multi-App Support | ✅ Implemented | Registered UAT targets, richer deterministic browser actions, persisted execution history and evidence |
+| **M5** | Agentic Orchestration | 🔨 Next | Specialized planning/execution/diagnosis agents coordinated inside one mission |
 | **M6** | Self-Healing & Smart Recovery | Planned | Safe locator healing, retries and evidence-based repair |
 | **M7** | Regression & Learning Intelligence | Planned | Historical mission learning and targeted regression |
 | **M8** | Autonomous CI/CD Quality Gate | Planned | Auravis validates releases and returns a delivery recommendation |
+
+**Roadmap progress: 4 / 8 milestones complete (50%).**
+
+---
+
+## M4 — Advanced Automation
+
+M4 closes the gap between generated test cases and auditable UAT execution.
+
+### Multi-application targets
+
+Auravis can persist multiple UAT applications/environments instead of relying on one hard-coded URL.
+
+```text
+POST /api/applications
+GET  /api/applications
+```
+
+Each target stores application name, base URL, environment, authentication type and active state. Credentials are intentionally not stored in the application-target record.
+
+### Deterministic Playwright execution
+
+The execution engine supports controlled browser operations such as:
+
+- navigation
+- labelled field entry
+- button clicks
+- select/dropdown actions
+- checkbox actions
+- text verification
+- expected-result assertions
+
+Unsupported actions fail explicitly rather than being guessed.
+
+### Evidence and audit history
+
+Each browser run persists:
+
+- test case ID
+- target URL
+- PASS / FAIL
+- duration
+- diagnostic message
+- screenshot evidence path
+- execution timestamp
+
+```text
+GET /api/execution/history
+GET /api/execution/stats
+GET /api/execution/evidence/{file}
+```
 
 ---
 
@@ -157,25 +174,31 @@ Target operating model:
 ### Requirement intelligence
 - business intent analysis
 - acceptance criteria extraction
-- deterministic fallback when an external LLM key is unavailable
+- OpenAI-compatible integration with deterministic fallback
 
 ### Knowledge / RAG foundation
 - project knowledge persistence
-- knowledge retrieval service
+- retrieval service
 - PostgreSQL + pgvector-ready storage
 - mission-time grounding before QA reasoning
 
 ### Intelligent test design
 - functional scenarios
+- business-rule scenarios
 - negative scenarios
 - boundary scenarios
+- risk-based scenarios
 - requirement traceability
+- Excel and JSON download
 
 ### Automation & execution
 - Java + Playwright automation generation
-- controlled browser execution
-- PASS / FAIL result
-- screenshots and evidence where available
+- deterministic browser action vocabulary
+- controlled assertions
+- PASS / FAIL results
+- screenshots and evidence
+- persisted execution audit history
+- multi-application UAT target registry
 
 ### Failure intelligence
 - failure classification
@@ -199,8 +222,7 @@ Target operating model:
 - `/` — Auravis product overview, architecture and roadmap
 - `/auravis.html` — start an autonomous UAT mission
 - `/dashboard.html` — live mission dashboard and mission history
-
-The old `/scorpion.html` route remains only as a compatibility redirect to `/auravis.html`.
+- `/execution-center.html` — M4 application registry, execution metrics and evidence history
 
 ---
 
@@ -237,6 +259,8 @@ Open:
 
 ```text
 http://localhost:8080/auravis.html
+http://localhost:8080/dashboard.html
+http://localhost:8080/execution-center.html
 ```
 
 Health:
@@ -270,20 +294,20 @@ DEPLOYMENT SUCCESS
 Live environment:
 
 ```text
-https://tejas-aiqa.duckdns.org
+https://auravis-uat.duckdns.org
 ```
 
 Auravis:
 
 ```text
-https://tejas-aiqa.duckdns.org/auravis.html
+https://auravis-uat.duckdns.org/auravis.html
 ```
 
----
+Execution Center:
 
-## Branding Migration Note
-
-The product identity is now **Auravis — Autonomous UAT Engineer**. Some internal Java package/class/API identifiers may still use the historical `scorpion` name temporarily for backward compatibility and migration safety. Product-facing UI, documentation and new development should use **Auravis**.
+```text
+https://auravis-uat.duckdns.org/execution-center.html
+```
 
 ---
 
@@ -300,13 +324,13 @@ Structured AI Integration
   ↓
 RAG / Knowledge
   ↓
-Agentic Orchestration
+Intelligent Test Design
   ↓
-Deterministic Tools
+Deterministic Playwright Execution
   ↓
-Playwright UAT
+Evidence + Audit History
   ↓
-Evidence + Diagnosis
+Agentic Orchestration (M5)
   ↓
 Self-Healing
   ↓
