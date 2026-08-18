@@ -1,0 +1,100 @@
+name: EC2 Disk Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      truncate_docker_logs:
+        description: "Also truncate Docker JSON logs (use only when logs are consuming significant disk)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ec2-maintenance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Reclaim EC2 Disk Space
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Reclaim disk space safely
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          TRUNCATE_DOCKER_LOGS: ${{ inputs.truncate_docker_logs }}
+        run: |
+          set -Eeuo pipefail
+
+          printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
+          chmod 600 "$RUNNER_TEMP/ec2_key"
+          trap 'rm -f "$RUNNER_TEMP/ec2_key"' EXIT
+
+          SSH_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=20
+            -o ConnectionAttempts=3
+            -o ServerAliveInterval=10
+            -o ServerAliveCountMax=6
+            -o StrictHostKeyChecking=no
+            -i "$RUNNER_TEMP/ec2_key"
+          )
+
+          timeout 8m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" \
+            "TRUNCATE_DOCKER_LOGS='$TRUNCATE_DOCKER_LOGS' bash -se" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          echo "=== BEFORE CLEANUP ==="
+          df -h /
+          echo
+          sudo docker system df || true
+          echo
+
+          echo "=== SAFE CLEANUP ==="
+          echo "Removing stopped containers..."
+          sudo docker container prune -f || true
+
+          echo "Removing unused Docker images..."
+          sudo docker image prune -af || true
+
+          echo "Removing Docker build cache..."
+          timeout 240 sudo docker builder prune -af || true
+
+          echo "Cleaning apt cache..."
+          sudo apt-get clean || true
+
+          echo "Reducing journal logs to 100 MB..."
+          sudo journalctl --vacuum-size=100M >/dev/null 2>&1 || true
+
+          echo
+          echo "=== LARGEST DOCKER JSON LOGS ==="
+          sudo du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -h | tail -10 || true
+
+          if [ "$TRUNCATE_DOCKER_LOGS" = "true" ]; then
+            echo
+            echo "Truncating Docker JSON logs..."
+            sudo find /var/lib/docker/containers/ -name '*-json.log' -type f -exec truncate -s 0 {} \; || true
+          else
+            echo
+            echo "Docker log truncation not requested."
+          fi
+
+          echo
+          echo "=== AFTER CLEANUP ==="
+          df -h /
+          echo
+          sudo docker system df || true
+          echo
+
+          echo "=== RUNNING CONTAINERS ==="
+          sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+
+          echo
+          echo "IMPORTANT: Docker volumes were not pruned. PostgreSQL data is preserved."
+          REMOTE_SCRIPT
