@@ -37,6 +37,13 @@ class DeploymentFailureClassifierTest {
     }
 
     @Test
+    void classifiesDockerStartFailureWithoutBlindRetry() {
+        DeploymentFailureDiagnosis result = classifier.classify("ERROR: DOCKER_START_FAILURE - docker compose up failed");
+        assertEquals(DeploymentFailureType.DOCKER_START_FAILURE, result.type());
+        assertFalse(result.retryRecommended());
+    }
+
+    @Test
     void classifiesApplicationHealthFailure() {
         DeploymentFailureDiagnosis result = classifier.classify("Auravis container failed health verification at /actuator/health");
         assertEquals(DeploymentFailureType.APP_HEALTH_FAILURE, result.type());

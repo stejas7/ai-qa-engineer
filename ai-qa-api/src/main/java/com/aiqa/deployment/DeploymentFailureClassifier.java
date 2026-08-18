@@ -29,6 +29,10 @@ public class DeploymentFailureClassifier {
             return diagnosis(DeploymentFailureType.DOCKER_PULL_FAILURE,
                     "Verify GHCR authentication, image tag/SHA and package permissions before retrying.", true);
         }
+        if (containsAny(text, "docker_start_failure", "docker compose up", "container failed to start", "container exited", "container restarting")) {
+            return diagnosis(DeploymentFailureType.DOCKER_START_FAILURE,
+                    "Inspect docker compose status and ai-qa-api logs, then rollback to the previous image if startup cannot be recovered safely.", false);
+        }
         if (containsAny(text, "actuator/health", "container failed health", "status\":\"down", "failed health verification")) {
             return diagnosis(DeploymentFailureType.APP_HEALTH_FAILURE,
                     "Inspect ai-qa-api container logs and rollback to the previous image if health does not recover.", false);
