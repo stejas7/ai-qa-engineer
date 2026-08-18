@@ -169,14 +169,19 @@ jobs:
 
             for i in $(seq 1 30); do
               if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/rollback-health.json 2>/dev/null && grep -q '"status":"UP"' /tmp/rollback-health.json; then
-                echo "M8_ROLLBACK_STATUS=VERIFIED"
-                cat /tmp/rollback-health.json
-                return 0
+                if curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8080/api/ai/runtime >/tmp/rollback-ai-runtime.json 2>/dev/null && grep -q '"framework":"Spring AI"' /tmp/rollback-ai-runtime.json; then
+                  echo "M8_ROLLBACK_STATUS=VERIFIED"
+                  cat /tmp/rollback-health.json
+                  cat /tmp/rollback-ai-runtime.json
+                  return 0
+                fi
               fi
               sleep 2
             done
 
-            echo "M8_ROLLBACK_STATUS=FAILED_HEALTH"
+            echo "M8_ROLLBACK_STATUS=FAILED_RUNTIME_OR_HEALTH"
+            cat /tmp/rollback-health.json 2>/dev/null || true
+            cat /tmp/rollback-ai-runtime.json 2>/dev/null || true
             sudo docker compose ps || true
             sudo docker compose logs --tail=200 ai-qa-api || true
             return 1
@@ -227,19 +232,19 @@ jobs:
 
           if [ "$rc" -eq 21 ]; then
             echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
-            echo "ERROR: Auravis container failed health verification; rollback to the previous image was verified healthy"
+            echo "ERROR: Auravis container failed health verification; rollback to the previous image was verified healthy with a valid Spring AI runtime"
             exit 1
           elif [ "$rc" -eq 22 ]; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
-            echo "ERROR: Spring AI/RAG runtime verification failed; rollback to the previous image was verified healthy"
+            echo "ERROR: Spring AI/RAG runtime verification failed; rollback to the previous image was verified healthy with a valid Spring AI runtime"
             exit 1
           elif [ "$rc" -eq 23 ]; then
             echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
-            echo "ERROR: Auravis health verification failed and previous-image rollback did not recover to UP"
+            echo "ERROR: Auravis health verification failed and previous-image rollback did not recover health/runtime verification"
             exit 1
           elif [ "$rc" -eq 24 ]; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
-            echo "ERROR: Spring AI/RAG runtime verification failed and previous-image rollback did not recover to UP"
+            echo "ERROR: Spring AI/RAG runtime verification failed and previous-image rollback did not recover health/runtime verification"
             exit 1
           elif [ "$rc" -ne 0 ]; then
             echo "M8_FAILURE_CLASS=UNKNOWN"
@@ -294,7 +299,7 @@ jobs:
             echo "**Action:** Read the image deployment log. Pull failures point to GHCR/image availability; start failures now include docker compose status and recent ai-qa-api logs." >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.local_health.outcome }}" = "failure" ]; then
             echo "**Classification:** APP_HEALTH_FAILURE or RAG_RUNTIME_FAILURE" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Action:** Review local health/runtime output and M8_ROLLBACK_STATUS. Rollback is successful only when the previous image returns /actuator/health = UP." >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Review local health/runtime output and M8_ROLLBACK_STATUS. Rollback is successful only when the previous image returns /actuator/health = UP and /api/ai/runtime reports Spring AI." >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.public_health.outcome }}" = "failure" ]; then
             echo "**Classification:** PUBLIC_ENDPOINT_FAILURE" >> "$GITHUB_STEP_SUMMARY"
             echo "**Action:** Verify DuckDNS, TLS/reverse proxy and public routing while localhost remains healthy." >> "$GITHUB_STEP_SUMMARY"
