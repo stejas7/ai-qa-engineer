@@ -131,6 +131,17 @@ jobs:
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
 
+          rollback_previous_image() {
+            previous_image="$(cat /tmp/auravis-previous-image 2>/dev/null || true)"
+            if [ -n "$previous_image" ]; then
+              echo "Rolling back to previous image: $previous_image"
+              export AI_QA_IMAGE="$previous_image"
+              sudo -E docker compose up -d --remove-orphans
+            else
+              echo "No previous Auravis image recorded; rollback skipped"
+            fi
+          }
+
           healthy=false
           for i in $(seq 1 45); do
             if curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8080/actuator/health >/tmp/health.json 2>/dev/null && grep -q '"status":"UP"' /tmp/health.json; then
@@ -144,12 +155,7 @@ jobs:
             echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
             sudo docker compose ps || true
             sudo docker compose logs --tail=250 ai-qa-api || true
-            previous_image="$(cat /tmp/auravis-previous-image 2>/dev/null || true)"
-            if [ -n "$previous_image" ]; then
-              echo "Rolling back to previous image: $previous_image"
-              export AI_QA_IMAGE="$previous_image"
-              sudo -E docker compose up -d --remove-orphans
-            fi
+            rollback_previous_image
             exit 21
           fi
 
@@ -157,11 +163,13 @@ jobs:
 
           if ! curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8080/api/ai/runtime >/tmp/ai-runtime.json; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            rollback_previous_image
             exit 22
           fi
           cat /tmp/ai-runtime.json
           if ! grep -q '"framework":"Spring AI"' /tmp/ai-runtime.json; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
+            rollback_previous_image
             exit 22
           fi
 
@@ -177,7 +185,7 @@ jobs:
             exit 1
           elif [ "$rc" -eq 22 ]; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
-            echo "ERROR: Spring AI/RAG runtime verification failed"
+            echo "ERROR: Spring AI/RAG runtime verification failed; previous image rollback was attempted"
             exit 1
           elif [ "$rc" -ne 0 ]; then
             echo "M8_FAILURE_CLASS=UNKNOWN"
@@ -232,7 +240,7 @@ jobs:
             echo "**Action:** Verify GHCR auth, image SHA/tag and package permissions." >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.local_health.outcome }}" = "failure" ]; then
             echo "**Classification:** APP_HEALTH_FAILURE or RAG_RUNTIME_FAILURE" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Action:** Review local health/runtime output and the captured backend logs; application rollback is attempted for health failures." >> "$GITHUB_STEP_SUMMARY"
+            echo "**Action:** Review local health/runtime output and captured backend logs; rollback to the previous image is attempted for both health and local AI runtime failures." >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.public_health.outcome }}" = "failure" ]; then
             echo "**Classification:** PUBLIC_ENDPOINT_FAILURE" >> "$GITHUB_STEP_SUMMARY"
             echo "**Action:** Verify DuckDNS, TLS/reverse proxy and public routing while localhost remains healthy." >> "$GITHUB_STEP_SUMMARY"
