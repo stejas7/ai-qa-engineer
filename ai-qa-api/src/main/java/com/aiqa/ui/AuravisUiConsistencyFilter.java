@@ -30,7 +30,69 @@ public class AuravisUiConsistencyFilter extends OncePerRequestFilter {
 @media(prefers-reduced-motion:reduce){#auravis-global-nav{transition:none}}
 </style>
 <nav id="auravis-global-nav" aria-label="Auravis navigation"><a class="showcase" data-path="/technology.html" href="/technology.html">Engineering Showcase</a><a data-path="/" href="/">Overview</a><a data-path="/auravis.html" href="/auravis.html">New Mission</a><a data-path="/dashboard.html" href="/dashboard.html">Mission Dashboard</a><a data-path="/execution-center.html" href="/execution-center.html">Execution Center</a><a data-path="/real-world-impact.html" href="/real-world-impact.html">Knowledge & Impact</a><span id="auravis-live-state"></span></nav>
-<script>(()=>{const nav=document.getElementById('auravis-global-nav');const path=(location.pathname==='/'||location.pathname==='/index.html')?'/':location.pathname;document.querySelectorAll('#auravis-global-nav a').forEach(a=>a.classList.toggle('active',a.dataset.path===path));let hideTimer;const hide=()=>{if(nav&&!nav.matches(':hover')&&!nav.contains(document.activeElement))nav.classList.add('auravis-nav-hidden')};const show=()=>{if(!nav)return;nav.classList.remove('auravis-nav-hidden');clearTimeout(hideTimer);hideTimer=setTimeout(hide,1800)};['mousemove','pointermove','touchstart','keydown','scroll'].forEach(evt=>window.addEventListener(evt,show,{passive:true}));nav?.addEventListener('mouseenter',()=>{clearTimeout(hideTimer);nav.classList.remove('auravis-nav-hidden')});nav?.addEventListener('mouseleave',show);nav?.addEventListener('focusin',()=>{clearTimeout(hideTimer);nav.classList.remove('auravis-nav-hidden')});nav?.addEventListener('focusout',show);show();const live=document.getElementById('auravis-live-state');const setText=(id,v)=>{const e=document.getElementById(id);if(e&&v!==undefined&&v!==null)e.textContent=v};async function summary(){if(path!=='/dashboard.html')return;try{const r=await fetch('/api/pipeline/runs',{cache:'no-store'});if(!r.ok)return;const runs=await r.json();if(!Array.isArray(runs)||!runs.length)return;const latest=runs[0];if(latest.resultJson){try{const d=JSON.parse(latest.resultJson);setText('mReq',d.requirements?.length??d.totalRequirements??'—');setText('mTests',d.totalTests??d.testCases?.length??'—');setText('mExec',(d.passedTests??0)+(d.failedTests??0));setText('mIssues',d.failedTests??'—');setText('mDecision',d.qualityGate?.decision??d.decision??'—')}catch(e){}}}catch(e){}}async function refresh(){if(path!=='/dashboard.html')return;try{if(typeof loadStats==='function')await loadStats();if(typeof loadRuns==='function')await loadRuns();await summary();live.textContent='● Live';live.title='Last refreshed '+new Date().toLocaleTimeString()}catch(e){live.textContent='Refresh delayed'}}if(path==='/dashboard.html'){refresh();setInterval(refresh,10000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()})}})();</script>
+<script>(()=>{
+ const nav=document.getElementById('auravis-global-nav');
+ const path=(location.pathname==='/'||location.pathname==='/index.html')?'/':location.pathname;
+ document.querySelectorAll('#auravis-global-nav a').forEach(a=>a.classList.toggle('active',a.dataset.path===path));
+ let hideTimer;
+ const hide=()=>{if(nav&&!nav.matches(':hover')&&!nav.contains(document.activeElement))nav.classList.add('auravis-nav-hidden')};
+ const show=()=>{if(!nav)return;nav.classList.remove('auravis-nav-hidden');clearTimeout(hideTimer);hideTimer=setTimeout(hide,1800)};
+ ['mousemove','pointermove','touchstart','keydown','scroll'].forEach(evt=>window.addEventListener(evt,show,{passive:true}));
+ nav?.addEventListener('mouseenter',()=>{clearTimeout(hideTimer);nav.classList.remove('auravis-nav-hidden')});
+ nav?.addEventListener('mouseleave',show);
+ nav?.addEventListener('focusin',()=>{clearTimeout(hideTimer);nav.classList.remove('auravis-nav-hidden')});
+ nav?.addEventListener('focusout',show);
+ show();
+ const live=document.getElementById('auravis-live-state');
+ const setText=(id,v)=>{const e=document.getElementById(id);if(e&&v!==undefined&&v!==null)e.textContent=v};
+ async function restoreLatestMission(){
+   if(path!=='/dashboard.html')return;
+   try{
+     const listResponse=await fetch('/api/pipeline/runs',{cache:'no-store'});
+     if(!listResponse.ok)return;
+     const runs=await listResponse.json();
+     if(!Array.isArray(runs)||!runs.length)return;
+     const latest=runs[0];
+     const detailResponse=await fetch('/api/pipeline/runs/'+latest.id,{cache:'no-store'});
+     if(!detailResponse.ok)return;
+     const detail=await detailResponse.json();
+     setText('statusText',(detail.fileName||'Mission')+' — '+detail.status);
+     setText('stageText',detail.currentStage||'');
+     if(typeof renderStages==='function')renderStages(detail.currentStage||'');
+     if(detail.resultJson){
+       try{
+         const d=JSON.parse(detail.resultJson);
+         setText('mReq',d.requirements?.length??d.totalRequirements??'—');
+         setText('mTests',d.totalTests??d.testCases?.length??'—');
+         setText('mExec',(d.passedTests??0)+(d.failedTests??0));
+         setText('mIssues',d.failedTests??'—');
+         setText('mDecision',d.qualityGate?.decision??d.decision??'—');
+         const resultCard=document.getElementById('resultCard');
+         const result=document.getElementById('result');
+         if(resultCard)resultCard.classList.remove('hidden');
+         if(result)result.textContent=JSON.stringify(d,null,2);
+         if(typeof setDownloads==='function')setDownloads(detail.id);
+       }catch(e){}
+     }
+   }catch(e){}
+ }
+ async function refresh(){
+   if(path!=='/dashboard.html')return;
+   try{
+     if(typeof loadStats==='function')await loadStats();
+     if(typeof loadRuns==='function')await loadRuns();
+     await restoreLatestMission();
+     live.textContent='● Live';
+     live.title='Last refreshed '+new Date().toLocaleTimeString();
+   }catch(e){live.textContent='Refresh delayed'}
+ }
+ if(path==='/dashboard.html'){
+   refresh();
+   setInterval(refresh,10000);
+   window.addEventListener('focus',refresh);
+   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+ }
+})();</script>
 """;}
     private static final class BufferingResponse extends HttpServletResponseWrapper{private final ByteArrayOutputStream buffer=new ByteArrayOutputStream();private PrintWriter writer;BufferingResponse(HttpServletResponse r){super(r);}@Override public ServletOutputStream getOutputStream(){return new ServletOutputStream(){public boolean isReady(){return true;}public void setWriteListener(WriteListener l){}public void write(int b){buffer.write(b);}};}@Override public PrintWriter getWriter(){if(writer==null)writer=new PrintWriter(new OutputStreamWriter(buffer,StandardCharsets.UTF_8));return writer;}String body(){if(writer!=null)writer.flush();return buffer.toString(StandardCharsets.UTF_8);}}
 }
