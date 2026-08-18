@@ -1,9 +1,19 @@
 package com.aiqa.application;
 
+import com.aiqa.company.CompanyRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,21 +22,31 @@ import java.util.UUID;
 @RequestMapping("/api/applications")
 public class ApplicationTargetController {
     private final ApplicationTargetRepository repository;
+    private final CompanyRepository companyRepository;
 
-    public ApplicationTargetController(ApplicationTargetRepository repository) {
+    public ApplicationTargetController(ApplicationTargetRepository repository, CompanyRepository companyRepository) {
         this.repository = repository;
+        this.companyRepository = companyRepository;
     }
 
     @GetMapping
-    public List<ApplicationTarget> all(@RequestParam(defaultValue = "false") boolean activeOnly) {
+    public List<ApplicationTarget> all(@RequestParam(defaultValue = "false") boolean activeOnly,
+                                       @RequestParam(required = false) UUID companyId) {
+        if (companyId != null) {
+            return activeOnly ? repository.findByCompanyIdAndActiveTrueOrderByCreatedAtDesc(companyId)
+                    : repository.findByCompanyIdOrderByCreatedAtDesc(companyId);
+        }
         return activeOnly ? repository.findByActiveTrueOrderByCreatedAtDesc()
                 : repository.findAllByOrderByCreatedAtDesc();
     }
 
     @PostMapping
     public ApplicationTarget create(@Valid @RequestBody CreateApplicationRequest request) {
+        if (request.companyId() != null && !companyRepository.existsById(request.companyId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown companyId");
+        }
         return repository.save(new ApplicationTarget(
-                request.name(), request.baseUrl(), request.environment(), request.authType()));
+                request.name(), request.baseUrl(), request.environment(), request.authType(), request.companyId()));
     }
 
     @PatchMapping("/{id}/active")
@@ -40,5 +60,6 @@ public class ApplicationTargetController {
     public record CreateApplicationRequest(@NotBlank String name,
                                            @NotBlank String baseUrl,
                                            String environment,
-                                           String authType) {}
+                                           String authType,
+                                           UUID companyId) {}
 }
