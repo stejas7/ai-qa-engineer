@@ -1,21 +1,20 @@
-# 🦂 Scorpion 2.0.0 — Autonomous UAT QA Agent
+# 🦂 Scorpion 2.0.0 — Autonomous AI QA Engineer
 
-> **Business requirement in. Autonomous UAT QA out.**
+> **From business requirement to release confidence, autonomously.**
 
-Scorpion is a Java + Spring Boot agentic QA platform that takes an end-to-end business requirement and a UAT environment, then automatically understands the requirement, grounds itself in project knowledge, creates test scenarios, generates Playwright automation, executes UAT, diagnoses failures and produces a business-readable QA decision.
+## Purpose & Vision
 
-The product is now intentionally centered on **one autonomous Scorpion mission**. Historical V1.x pages and the 1.0.0 product identity are no longer part of the active product experience.
+**Scorpion is an Autonomous AI QA Engineer designed to take end-to-end ownership of software quality engineering activities traditionally performed through dedicated QA execution roles.**
 
----
+Its long-term objective is to enable engineering organizations to operate with **minimal dependency on dedicated manual QA execution** by autonomously understanding business requirements, designing test scenarios, generating automation, executing UAT, diagnosing failures, safely self-healing eligible automation issues, performing regression validation, and producing evidence-backed quality decisions.
 
-## Product goal
+> **Scorpion acts as an autonomous QA engineer within the software delivery lifecycle — continuously understanding, testing, validating, diagnosing, and protecting product quality with minimal human intervention.**
 
-The user should provide only:
+The goal is not merely test automation. Scorpion is being engineered toward **autonomous ownership of the QA lifecycle**, while retaining deterministic controls, evidence, auditability, and human approval boundaries for sensitive actions.
 
-1. a business requirement / BRD / PRD / user story, and
-2. a UAT environment URL.
+## Product Goal
 
-Then Scorpion owns the QA workflow.
+The user provides a complete business requirement (BRD, PRD, user story, or specification) and the UAT environment. Scorpion owns the QA workflow from that point onward.
 
 ```text
 Business Requirement / BRD / PRD
@@ -23,56 +22,54 @@ Business Requirement / BRD / PRD
           UAT URL
               │
               ▼
-      ┌──────────────────┐
-      │    🦂 SCORPION   │
-      │ Autonomous UAT QA│
-      └────────┬─────────┘
-               │
-               ▼
+      ┌────────────────────┐
+      │    🦂 SCORPION     │
+      │ Autonomous AI QA   │
+      └─────────┬──────────┘
+                │
+                ▼
        Knowledge Retrieval
-               │
-               ▼
+                │
+                ▼
     Requirement Intelligence
-               │
-               ▼
+                │
+                ▼
       Intelligent Test Design
-               │
-               ▼
+                │
+                ▼
       Automation Generation
-               │
-               ▼
-         UAT Execution
-               │
-        ┌──────┴──────┐
-        ▼             ▼
-      PASS           FAIL
-                        │
-                        ▼
-                 Failure Diagnosis
-                        │
-                        ▼
-                  Safe Self-Healing
-                        │
-                        ▼
-                  Regression Re-run
-                        │
-                        ▼
-                 Final QA Decision
-                        │
-                        ▼
-                Evidence + Report
+                │
+                ▼
+          UAT Execution
+                │
+         ┌──────┴──────┐
+         ▼             ▼
+       PASS           FAIL
+                         │
+                         ▼
+                  Failure Diagnosis
+                         │
+                         ▼
+                   Safe Self-Healing
+                         │
+                         ▼
+                   Regression Re-run
+                         │
+                         ▼
+                  Final QA Decision
+                         │
+                         ▼
+                 Evidence + Report
 ```
 
----
-
-# Scorpion 2.0 architecture
+## Scorpion 2.0 Architecture
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         SCORPION 2.0.0                                  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ EXPERIENCE                                                              │
-│ Requirement upload / paste • UAT URL • Mission status • Final decision  │
+│ Requirement upload • UAT URL • Mission status • Evidence • QA decision  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ MISSION CONTROL                                                         │
 │ ScorpionMission • Mission state • Autonomous orchestration              │
@@ -91,353 +88,96 @@ Business Requirement / BRD / PRD
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Architecture principle
+### Engineering Principle
 
 > **AI understands, plans and diagnoses. Java controls state and policy. Playwright executes. Evidence proves what happened.**
 
-Scorpion does not give an LLM unrestricted shell, filesystem, database or deployment access. Real-world actions stay behind deterministic application services and controlled tool boundaries.
+Scorpion does not give an LLM unrestricted infrastructure access. Real-world actions remain behind deterministic application services and controlled tool boundaries.
 
----
-
-# Current autonomous mission flow
-
-```text
-ScorpionMission
-      │
-      ├── Retrieve relevant project knowledge
-      │
-      ├── Analyze complete business requirement
-      │
-      ├── Generate functional / negative / boundary scenarios
-      │
-      ├── Generate Playwright Java automation
-      │
-      ├── Execute against UAT
-      │
-      ├── Capture execution result + evidence
-      │
-      ├── Diagnose failures automatically
-      │
-      └── Produce final QA decision
-```
-
-The user does **not** manually navigate separate requirement, test-design, automation, execution and failure-analysis pages. Those capabilities remain reusable Java services inside the Scorpion mission.
-
----
-
-# Scorpion 2.0 roadmap
-
-The roadmap is capability-based rather than a collection of separate product pages.
+## Scorpion 2.0 Roadmap
 
 | Milestone | Capability | Status | Product outcome |
 |---|---|---|---|
-| **M1** | Autonomous QA Mission | ✅ Implemented | One requirement → test design → automation → execution → diagnosis |
-| **M2** | Knowledge / RAG | 🟡 In progress | Scorpion retrieves project knowledge before making QA decisions |
-| **M3** | Intelligent Test Generation | 🔜 Next | Better business-flow, negative, boundary, risk and traceability coverage |
-| **M4** | Agentic Mission Orchestration | 🔜 Planned | Specialized capabilities coordinated automatically by mission state |
-| **M5** | Safe Self-Healing | 🔜 Planned | Diagnose automation failures, propose safe repairs and re-run |
-| **M6** | Learning / Regression Intelligence | 🔜 Planned | Use historical missions and failures to improve future QA selection |
-| **M7** | Autonomous CI/CD Quality Gate | 🔜 Planned | Scorpion runs after deployment and produces a delivery recommendation |
-| **M8** | Enterprise Governance | 🔜 Planned | RBAC, policy, audit, multi-project isolation and provider controls |
+| **M1** | Autonomous QA Mission | ✅ Implemented | Requirement → tests → automation → UAT → diagnosis |
+| **M2** | Knowledge / RAG | 🟡 In progress | Ground QA reasoning in project knowledge |
+| **M3** | Intelligent Test Generation | 🔜 Next | Business-flow, negative, boundary, risk and traceability coverage |
+| **M4** | Agentic Mission Orchestration | 🔜 Planned | Specialized AI capabilities coordinated automatically |
+| **M5** | Safe Self-Healing | 🔜 Planned | Diagnose eligible automation failures, repair and re-run |
+| **M6** | Learning & Regression Intelligence | 🔜 Planned | Learn from mission history to improve regression selection |
+| **M7** | Autonomous CI/CD Quality Gate | 🔜 Planned | Execute Scorpion after deployment and produce release recommendation |
+| **M8** | Enterprise Governance | 🔜 Planned | RBAC, audit, policy, isolation and provider controls |
 
-### Target product journey
+## Current Capabilities
 
-```text
-Upload Requirement
-      ↓
-Scorpion Mission
-      ↓
-Ground with Knowledge
-      ↓
-Generate Test Intelligence
-      ↓
-Generate Automation
-      ↓
-Execute UAT
-      ↓
-Diagnose Failure
-      ↓
-Self-Heal when safe
-      ↓
-Regression Re-run
-      ↓
-Final QA Report
-      ↓
-CI/CD Quality Decision
-```
-
----
-
-# Implemented capabilities
-
-### Autonomous mission
-
-- `ScorpionMission` persistence
-- one-click mission API
-- requirement file upload (`.txt`, `.md`, `.docx`, `.pdf`)
-- pasted requirement input
-- UAT URL input
-- automatic stage progression
-- mission status and final decision
-
-### Requirement intelligence
-
-- business intent analysis
-- acceptance/test scenario extraction
-- deterministic fallback when an external LLM key is not configured
-
-### Knowledge foundation
-
-- knowledge document persistence
-- project knowledge retrieval service
-- knowledge REST API
-- PostgreSQL configured with pgvector image and vector extension
-- Scorpion mission retrieves relevant knowledge before requirement analysis
-
-> Current retrieval is deliberately deterministic/lexical. The architecture is ready for a real embedding provider and vector retriever without changing mission orchestration.
-
-### Intelligent test design
-
-- functional scenarios
-- negative scenarios
-- boundary scenarios
-- traceability coverage
-
-### Automation and UAT
-
+- Business requirement upload and pasted requirement input
+- Autonomous mission state and stage progression
+- Requirement intelligence and acceptance-scenario extraction
+- Project knowledge persistence and retrieval
+- Functional, negative and boundary test generation
 - Java + Playwright automation generation
-- deterministic browser execution
-- PASS / FAIL result
-- screenshots / execution evidence where available
+- UAT execution and evidence capture
+- Automatic failure classification and diagnosis
+- Business-readable QA decision
+- Maven, Docker, GHCR, GitHub Actions and AWS EC2 delivery
 
-### Failure intelligence
+## Technology Stack
 
-- automatic failure classification
-- severity / probable cause
-- recommendation
-- retry signal
-
-### Delivery
-
-- Maven verification
-- Docker image based on Playwright runtime
-- GHCR image publishing
-- AWS EC2 deployment
-- health checks and rollback
-- public Scorpion UI smoke check
-
----
-
-# Technology stack
-
-- **Java 17+** (project currently compiles against Java 17 for runtime compatibility)
+- Java 17+
 - Spring Boot 3.5.x
 - Maven
 - Spring Data JPA
 - PostgreSQL 16
-- pgvector
+- pgvector-ready knowledge layer
 - Playwright for Java
-- OpenAI-compatible AI integration with deterministic fallback
+- OpenAI-compatible AI abstraction with deterministic fallback
 - Docker / Docker Compose
-- GitHub Actions
-- GitHub Container Registry (GHCR)
-- AWS EC2
-- Nginx + HTTPS
+- GitHub Actions + GHCR
+- AWS EC2 + HTTPS
 
----
+## Primary UI
 
-# Primary UI
+- `/` — Scorpion 2.0 overview, architecture and roadmap
+- `/scorpion.html` — start an autonomous QA mission
+- `/dashboard.html` — mission execution dashboard, evidence and QA decisions
 
-### Scorpion mission
-
-```text
-/scorpion.html
-```
-
-This is the main user experience: upload or paste a requirement, provide UAT URL, and start autonomous QA.
-
-### Pipeline dashboard
-
-```text
-/dashboard.html
-```
-
-Used to observe uploaded requirement pipeline runs, stage progression, generated tests, automation, execution results and quality information.
-
-### Overview
-
-```text
-/
-```
-
-Shows the Scorpion 2.0 product architecture and roadmap.
-
----
-
-# Core Scorpion API
-
-### Start from pasted requirement
-
-```http
-POST /api/scorpion/missions
-```
-
-```json
-{
-  "title": "Customer checkout UAT",
-  "requirement": "A customer can search a product, add it to cart, pay and receive an order confirmation.",
-  "uatUrl": "https://uat.example.com"
-}
-```
-
-### Start from uploaded requirement
-
-```http
-POST /api/scorpion/missions/upload
-Content-Type: multipart/form-data
-```
-
-Fields:
-
-- `file`
-- `title`
-- `uatUrl`
-
-### Mission history
-
-```http
-GET /api/scorpion/missions
-GET /api/scorpion/missions/{id}
-```
-
-### Knowledge
-
-```http
-POST /api/knowledge/documents
-GET  /api/knowledge/documents
-POST /api/knowledge/search
-```
-
----
-
-# Run locally
+## Run Locally
 
 ```bash
 git clone https://github.com/stejas7/ai-qa-engineer.git
 cd ai-qa-engineer
-
 docker compose up -d postgres
 mvn clean verify
 mvn spring-boot:run -pl ai-qa-api
 ```
 
-Health:
+Then open `http://localhost:8080/scorpion.html`.
 
-```bash
-curl http://localhost:8080/actuator/health
-```
-
-Then open:
-
-```text
-http://localhost:8080/scorpion.html
-```
-
-For the full Docker runtime:
-
-```bash
-docker compose up -d
-```
-
----
-
-# Deployment
+## Delivery Flow
 
 ```text
 Commit to main
       ↓
-AI QA Engineer Build
+Maven verification
       ↓
-Maven verify
+Docker image
       ↓
-Build exact Docker image
+GHCR
       ↓
-Publish image to GHCR
+AWS EC2 deployment
       ↓
-AWS deployment workflow
+Health checks
       ↓
-EC2 pulls tested image
+Scorpion UI smoke test
       ↓
-Docker Compose restart
-      ↓
-Local health check
-      ↓
-Public health check
-      ↓
-/scorpion.html smoke check
-      ↓
-DEPLOYMENT SUCCESS
+Deployment success
 ```
 
-The deployment workflow is intentionally separate from future Scorpion QA/quality-gate workflows so an application deployment is not incorrectly marked failed by an unrelated QA stage.
+## Product Direction
 
----
+Historical V1.x UI pages are removed from the active product. Existing Java requirement-analysis, test-design, automation, execution, and failure-analysis services remain because they are reusable internal capabilities of the Scorpion mission.
 
-# What was removed from the active 2.0 product
+Every future feature must move Scorpion closer to **autonomous, explainable, evidence-backed and safe ownership of the software QA lifecycle** rather than simply adding more screens or disconnected AI features.
 
-The old static version pages were removed from `main`:
+## Portfolio Note
 
-- `v2.html`
-- `v3.html`
-- `v4.html`
-- `v5.html`
-- `v8.html`
-- `v9.html`
-
-The underlying Java services for requirement analysis, test design, automation, execution and failure analysis are **not legacy waste**; they are reused as internal Scorpion capabilities and therefore remain intentionally.
-
-Old 1.0 branding and old V1–V12 UI navigation should no longer appear in the active Scorpion 2.0 experience.
-
----
-
-# Learning value
-
-Scorpion is designed to demonstrate an end-to-end Java → GenAI / Agentic AI engineering journey:
-
-```text
-Java
-  ↓
-Spring Boot
-  ↓
-Structured AI integration
-  ↓
-RAG / Knowledge
-  ↓
-Agentic orchestration
-  ↓
-Deterministic tools
-  ↓
-Playwright UAT
-  ↓
-Evidence + diagnosis
-  ↓
-Self-healing
-  ↓
-CI/CD + AWS
-```
-
-The purpose is not to add AI features for their own sake. Every capability must help Scorpion move closer to **autonomous, explainable and safe UAT QA from a business requirement**.
-
----
-
-## Repository & demo
-
-Repository: https://github.com/stejas7/ai-qa-engineer  
-Live environment: https://tejas-aiqa.duckdns.org  
-Scorpion: https://tejas-aiqa.duckdns.org/scorpion.html
-
----
-
-## License / portfolio note
-
-This is a learning and portfolio-oriented reference implementation. Production adoption would require organization-specific identity, secrets management, security controls, compliance, resource isolation and operational hardening.
+Scorpion is a learning and portfolio-oriented reference implementation demonstrating an end-to-end Java → GenAI → Agentic AI engineering journey. Production adoption requires organization-specific identity, secrets management, security controls, compliance, isolation, governance and operational hardening.
