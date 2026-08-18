@@ -31,15 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * The "just upload the requirement, watch the dashboard" pipeline.
- *
- * <p>Given raw requirement document text and a target application URL, this service
- * automatically performs every stage the platform previously required manual API calls for:
- * requirement understanding, test design, automation generation, real Playwright execution,
- * failure analysis on any failed test, and a final quality gate decision - all recorded as one
- * {@link AgentRun} and one {@link PipelineRun}.</p>
- */
+/** Runs the complete autonomous requirement-to-quality-gate pipeline. */
 @Service
 public class FullPipelineService {
 
@@ -79,10 +71,6 @@ public class FullPipelineService {
         this.pipelineRunRepository = pipelineRunRepository;
     }
 
-    /**
-     * Runs the full pipeline in the background. The caller already persisted a {@link PipelineRun}
-     * in {@code QUEUED} status and returned its id to the client for polling.
-     */
     @Async
     public void runInBackground(UUID pipelineRunId, String rawText, String fallbackTitle,
                                  String targetUrl, boolean executeAutomation) {
@@ -150,8 +138,7 @@ public class FullPipelineService {
                             var executionStep = agentOrchestrator.addStep(agentRun.getId(), "UAT_EXECUTION", testCase.id());
                             execution = executionService.run(new ExecutionRequest(
                                     testCase.id(), targetUrl, testCase.steps(), testCase.expectedResult(), true));
-                            agentOrchestrator.completeStep(executionStep.getId(),
-                                    execution.status() + " - " + execution.message());
+                            agentOrchestrator.completeStep(executionStep.getId(), execution.status() + " - " + execution.message());
 
                             if ("PASS".equalsIgnoreCase(execution.status())) {
                                 passedTests++;
@@ -159,8 +146,7 @@ public class FullPipelineService {
                                 failedTests++;
                                 var failureStep = agentOrchestrator.addStep(agentRun.getId(), "FAILURE_ANALYSIS", testCase.id());
                                 failureAnalysis = failureAnalysisService.analyze(new FailureAnalysisRequest(
-                                        testCase.id(), execution.message(), testCase.expectedResult(),
-                                        targetUrl, execution.screenshot()));
+                                        testCase.id(), execution.message(), testCase.expectedResult(), targetUrl, execution.screenshot()));
                                 agentOrchestrator.completeStep(failureStep.getId(), failureAnalysis.classification());
                             }
                         }
@@ -168,8 +154,8 @@ public class FullPipelineService {
 
                     testCaseResults.add(new PipelineModels.TestCaseResult(
                             testCase.id(), testCase.title(), testCase.type(), testCase.priority(),
-                            testCase.steps(), testCase.expectedResult(), testCase.automationCandidate(),
-                            automationFileName, automationCode, execution, failureAnalysis));
+                            testCase.preconditions(), testCase.steps(), testCase.testData(), testCase.expectedResult(),
+                            testCase.automationCandidate(), automationFileName, automationCode, execution, failureAnalysis));
                 }
 
                 requirementResults.add(new PipelineModels.RequirementResult(
@@ -180,24 +166,17 @@ public class FullPipelineService {
             pipelineRun.updateStage("Evaluating quality gate");
             pipelineRunRepository.save(pipelineRun);
 
-            int requirementsCovered = (int) requirementResults.stream()
-                    .filter(r -> !r.testCases().isEmpty()).count();
+            int requirementsCovered = (int) requirementResults.stream().filter(r -> !r.testCases().isEmpty()).count();
             QualityGateResponse gate = qualityGateService.evaluate(new QualityGateRequest(
-                    totalTests,
-                    executeAutomation ? passedTests : 0,
-                    executeAutomation ? failedTests : 0,
-                    automatedTests,
-                    requirementResults.size(),
-                    requirementsCovered));
+                    totalTests, executeAutomation ? passedTests : 0, executeAutomation ? failedTests : 0,
+                    automatedTests, requirementResults.size(), requirementsCovered));
 
             PipelineModels.PipelineResult result = new PipelineModels.PipelineResult(
                     pipelineRunId, agentRun.getId(), pipelineRun.getCompany(), pipelineRun.getFileName(),
                     targetUrl, requirementResults, totalTests, passedTests, failedTests, automatedTests, gate);
 
             agentOrchestrator.complete(agentRun.getId(),
-                    "Pipeline completed: " + requirementResults.size() + " requirements, "
-                            + totalTests + " tests, gate=" + gate.decision());
-
+                    "Pipeline completed: " + requirementResults.size() + " requirements, " + totalTests + " tests, gate=" + gate.decision());
             pipelineRun.complete(mapper.writeValueAsString(result));
             pipelineRunRepository.save(pipelineRun);
         } catch (Exception e) {
@@ -206,7 +185,7 @@ public class FullPipelineService {
                 agentRun.fail(e.getMessage());
                 agentOrchestrator.complete(agentRun.getId(), "Pipeline failed: " + e.getMessage());
             } catch (Exception ignored) {
-                // best-effort agent-run bookkeeping; the pipeline run failure below is authoritative
+                // best-effort bookkeeping
             }
             pipelineRun.fail(e.getMessage() == null ? e.toString() : e.getMessage());
             pipelineRunRepository.save(pipelineRun);
