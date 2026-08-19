@@ -2,6 +2,8 @@ package com.aiqa.script;
 
 import com.aiqa.application.ApplicationTarget;
 import com.aiqa.application.ApplicationTargetRepository;
+import com.aiqa.automation.AutomationResponse;
+import com.aiqa.automation.PlaywrightAutomationService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -15,7 +17,8 @@ import static org.mockito.Mockito.*;
 class AutomationScriptServiceTest {
     private final AutomationScriptRepository scripts = mock(AutomationScriptRepository.class);
     private final ApplicationTargetRepository products = mock(ApplicationTargetRepository.class);
-    private final AutomationScriptService service = new AutomationScriptService(scripts, products);
+    private final PlaywrightAutomationService generator = mock(PlaywrightAutomationService.class);
+    private final AutomationScriptService service = new AutomationScriptService(scripts, products, generator);
 
     @Test void createsDraftScriptForActiveOwnedProduct() {
         UUID companyId = UUID.randomUUID(); UUID productId = UUID.randomUUID();
@@ -52,5 +55,29 @@ class AutomationScriptServiceTest {
         AutomationScript script=new AutomationScript(companyId,productId,"Flow",List.of("open the application"));
         when(scripts.findById(id)).thenReturn(Optional.of(script)); when(scripts.save(script)).thenReturn(script);
         assertEquals("APPROVED",service.approve(id).getStatus());
+    }
+
+    @Test void revisionIncrementsVersionAndReturnsToDraft() {
+        UUID id=UUID.randomUUID(); AutomationScript script=new AutomationScript(UUID.randomUUID(),UUID.randomUUID(),"Flow",List.of("open the application")); script.approve();
+        when(scripts.findById(id)).thenReturn(Optional.of(script)); when(scripts.save(script)).thenReturn(script);
+        AutomationScript revised=service.revise(id,new AutomationScriptService.ReviseScriptRequest(List.of("open the application","verify \"Ready\"")));
+        assertEquals(2,revised.getVersion()); assertEquals("DRAFT",revised.getStatus()); assertEquals(2,revised.getSteps().size());
+    }
+
+    @Test void generationRequiresApprovalAndUsesProductTarget() {
+        UUID id=UUID.randomUUID(), companyId=UUID.randomUUID(), productId=UUID.randomUUID();
+        AutomationScript script=new AutomationScript(companyId,productId,"Flow",List.of("open the application")); script.approve();
+        when(scripts.findById(id)).thenReturn(Optional.of(script));
+        when(products.findById(productId)).thenReturn(Optional.of(new ApplicationTarget("App","https://example.test","UAT","NONE",companyId)));
+        when(generator.generate(any())).thenReturn(new AutomationResponse("AT-"+id,"Playwright","Java","Flow.java","class Flow {}"));
+        AutomationResponse response=service.generate(id,new AutomationScriptService.GenerateScriptRequest(null,"Expected"));
+        assertEquals("Playwright",response.framework()); verify(generator).generate(argThat(r->r.url().equals("https://example.test")&&r.steps().size()==1));
+    }
+
+    @Test void draftCannotGenerate() {
+        UUID id=UUID.randomUUID();
+        when(scripts.findById(id)).thenReturn(Optional.of(new AutomationScript(UUID.randomUUID(),UUID.randomUUID(),"Draft",List.of("open the application"))));
+        assertThrows(IllegalStateException.class,()->service.generate(id,null));
+        verifyNoInteractions(generator);
     }
 }
