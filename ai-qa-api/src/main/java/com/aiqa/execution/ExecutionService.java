@@ -15,7 +15,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Deterministic browser execution engine used by Auravis.
+ * Deterministic browser execution engine used by AI UAT Engineer.
  * M6 adds conservative self-healing: only recoverable automation failures may be
  * retried, every decision is persisted, and business/assertion failures remain untouched.
  *
@@ -59,12 +59,13 @@ public class ExecutionService {
                     capture(page, evidenceDir.resolve(afterFile));
                 }
             }
-            return persist(request, "PASS", start, afterFile, "Execution completed; controlled M6 healing applied only when policy allowed it.");
+            return persist(request, "PASS", start, evidenceIfPresent(evidenceDir, afterFile),
+                    "Execution completed; controlled M6 healing applied only when policy allowed it.");
         } catch (Exception e) {
             try {
                 if (page != null && !page.isClosed()) capture(page, evidenceDir.resolve(afterFile));
             } catch (Exception ignored) { }
-            return persist(request, "FAIL", start, afterFile, rootMessage(e));
+            return persist(request, "FAIL", start, evidenceIfPresent(evidenceDir, afterFile), rootMessage(e));
         }
     }
 
@@ -93,11 +94,15 @@ public class ExecutionService {
         page.navigate(url, new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
     }
 
-    private ExecutionResponse persist(ExecutionRequest request, String status, long start, String file, String message) {
+    private ExecutionResponse persist(ExecutionRequest request, String status, long start, String evidence, String message) {
         long duration = System.currentTimeMillis() - start;
-        String evidence = "/api/execution/evidence/" + file;
         records.save(new ExecutionRecord(request.testId(), request.url(), status, duration, evidence, message));
         return new ExecutionResponse(request.testId(), status, duration, evidence, message);
+    }
+
+    private String evidenceIfPresent(Path evidenceDir, String file) {
+        Path candidate = evidenceDir.resolve(file);
+        return Files.isRegularFile(candidate) ? "/api/execution/evidence/" + file : null;
     }
 
     private void capture(Page page, Path destination) {
