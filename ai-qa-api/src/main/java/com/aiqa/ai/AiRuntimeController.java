@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Safe, non-secret runtime metadata and M7 Spring AI QA endpoint.
+ * Safe, non-secret Spring AI runtime metadata and product-guide endpoint.
  *
  * @author Tejas Shah
  */
@@ -37,8 +37,8 @@ public class AiRuntimeController {
         status.put("chatClient", true);
         status.put("toolCalling", true);
         status.put("qaTools", 2);
-        status.put("m7Status", "IN_PROGRESS");
-        status.put("m7Focus", "Spring AI runtime, controlled QA tools, RAG and regression intelligence");
+        status.put("m7Status", "COMPLETED");
+        status.put("m7Focus", "Spring AI runtime, controlled QA tools, RAG and regression intelligence foundation");
         status.put("fallback", "Deterministic Java services remain active when the model is unavailable");
         return status;
     }
