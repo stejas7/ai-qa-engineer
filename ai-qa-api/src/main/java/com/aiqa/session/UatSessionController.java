@@ -9,6 +9,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -71,6 +73,19 @@ public class UatSessionController {
 
         return repository.save(new UatSession(
                 request.companyId(), request.applicationId(), request.buildVersion(), request.objective()));
+    }
+
+    @PatchMapping("/{id}/status")
+    public UatSession transition(@PathVariable UUID id,
+                                 @RequestParam UatSessionStatus status) {
+        UatSession session = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "UAT session not found"));
+        try {
+            session.transitionTo(status);
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage(), ex);
+        }
+        return repository.save(session);
     }
 
     public record CreateUatSessionRequest(@NotNull UUID companyId,
