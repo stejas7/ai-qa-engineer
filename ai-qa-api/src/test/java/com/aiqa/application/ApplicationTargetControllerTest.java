@@ -52,4 +52,22 @@ class ApplicationTargetControllerTest {
         assertEquals(400, error.getStatusCode().value());
         verify(applicationRepository, never()).save(any(ApplicationTarget.class));
     }
+
+    @Test
+    void rejectsDuplicateProductNameWithinCompany() {
+        ApplicationTargetRepository applicationRepository = mock(ApplicationTargetRepository.class);
+        CompanyRepository companyRepository = mock(CompanyRepository.class);
+        ApplicationTargetController controller = new ApplicationTargetController(applicationRepository, companyRepository);
+        UUID companyId = UUID.randomUUID();
+        when(companyRepository.findById(companyId)).thenReturn(Optional.of(new Company("Acme", "acme")));
+        when(applicationRepository.existsByCompanyIdAndNameIgnoreCase(companyId, "Checkout"))
+                .thenReturn(true);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> controller.create(new ApplicationTargetController.CreateApplicationRequest(
+                        " Checkout ", "https://checkout.example.test", "UAT", "NONE", companyId)));
+
+        assertEquals(409, error.getStatusCode().value());
+        verify(applicationRepository, never()).save(any(ApplicationTarget.class));
+    }
 }

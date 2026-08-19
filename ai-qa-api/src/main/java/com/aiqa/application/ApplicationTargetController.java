@@ -50,9 +50,13 @@ public class ApplicationTargetController {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Cannot register a product under an inactive company");
             }
+            if (repository.existsByCompanyIdAndNameIgnoreCase(request.companyId(), request.name().trim())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "A product with this name already exists for the company");
+            }
         }
         return repository.save(new ApplicationTarget(
-                request.name(), request.baseUrl(), request.environment(), request.authType(), request.companyId()));
+                request.name().trim(), request.baseUrl(), request.environment(), request.authType(), request.companyId()));
     }
 
     @PatchMapping("/{id}/active")
