@@ -1,5 +1,6 @@
 package com.aiqa.performance;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -24,9 +25,22 @@ public class LoadTestService {
     private static final int MAX_CONCURRENCY = 25;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private final LoadTestRunRepository runs;
+
+    /** Spring constructor used in production so every completed run is persisted as evidence. */
+    @Autowired
+    public LoadTestService(LoadTestRunRepository runs) { this.runs = runs; }
+
+    /** Test-friendly constructor keeps the runner deterministic without requiring a database. */
+    LoadTestService() { this.runs = null; }
 
     public LoadTestResult run(LoadTestRequest request) {
+        if (request == null) throw new IllegalArgumentException("load test request is required");
         URI target = validate(request.targetUrl());
+        if (request.maxP95Ms() <= 0) throw new IllegalArgumentException("maxP95Ms must be greater than zero");
+        if (request.maxErrorRatePercent() < 0 || request.maxErrorRatePercent() > 100)
+            throw new IllegalArgumentException("maxErrorRatePercent must be between 0 and 100");
+
         int total = Math.max(1, Math.min(request.requests(), MAX_REQUESTS));
         int concurrency = Math.max(1, Math.min(request.concurrency(), Math.min(MAX_CONCURRENCY, total)));
         List<Long> latencies = Collections.synchronizedList(new ArrayList<>());
@@ -53,8 +67,14 @@ public class LoadTestService {
         String summary = sloPassed
                 ? "Performance gate passed: p95 latency and error rate are within the requested SLO."
                 : "Performance gate failed: review latency/error evidence before release.";
-        return new LoadTestResult(target.toString(), total, concurrency, durationMs, p50, p95, p99, throughput,
+        LoadTestResult result = new LoadTestResult(target.toString(), total, concurrency, durationMs, p50, p95, p99, throughput,
                 failures.get(), errorRate, request.maxP95Ms(), request.maxErrorRatePercent(), sloPassed, risk, summary);
+        if (runs != null) runs.save(new LoadTestRun(result));
+        return result;
+    }
+
+    public List<LoadTestRun> history() {
+        return runs == null ? List.of() : runs.findTop50ByOrderByCreatedAtDesc();
     }
 
     private void execute(URI target, List<Long> latencies, AtomicInteger failures) {
@@ -68,7 +88,9 @@ public class LoadTestService {
     }
 
     private URI validate(String raw) {
-        URI uri = URI.create(raw);
+        if (raw == null || raw.isBlank()) throw new IllegalArgumentException("targetUrl is required");
+        URI uri;
+        try { uri = URI.create(raw); } catch (IllegalArgumentException e) { throw new IllegalArgumentException("targetUrl must be a valid absolute URL"); }
         if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) || uri.getHost() == null)
             throw new IllegalArgumentException("targetUrl must be an absolute http/https URL");
         return uri;
