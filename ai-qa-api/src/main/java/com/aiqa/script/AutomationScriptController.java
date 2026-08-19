@@ -1,10 +1,12 @@
 package com.aiqa.script;
 
+import com.aiqa.automation.AutomationResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/** M12 managed automation-script API. */
 @RestController
 @RequestMapping("/api/automation-scripts")
 public class AutomationScriptController {
@@ -34,6 +37,16 @@ public class AutomationScriptController {
 
     @PatchMapping("/{id}/approve")
     public AutomationScript approve(@PathVariable UUID id) { return service.approve(id); }
+
+    @PutMapping("/{id}")
+    public AutomationScript revise(@PathVariable UUID id, @RequestBody AutomationScriptService.ReviseScriptRequest request) {
+        return service.revise(id, request);
+    }
+
+    @PostMapping("/{id}/generate")
+    public AutomationResponse generate(@PathVariable UUID id, @RequestBody(required = false) AutomationScriptService.GenerateScriptRequest request) {
+        return service.generate(id, request);
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<Map<String,String>> badRequest(IllegalArgumentException e) {
