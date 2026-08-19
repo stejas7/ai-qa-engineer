@@ -25,6 +25,10 @@ public class DeploymentFailureClassifier {
             return diagnosis(DeploymentFailureType.SSH_FAILURE,
                     "Verify EC2 reachability, security-group port 22, host/user secrets and SSH key, then retry.", true);
         }
+        if (containsAny(text, "docker build", "failed to solve", "copy failed", "no such file or directory", "target/ai-qa-api-")) {
+            return diagnosis(DeploymentFailureType.DOCKER_BUILD_FAILURE,
+                    "Verify the Maven artifact path/version used by the Dockerfile before publishing or deploying an image.", false);
+        }
         if (containsAny(text, "docker pull", "manifest unknown", "unauthorized", "ghcr", "pull access denied")) {
             return diagnosis(DeploymentFailureType.DOCKER_PULL_FAILURE,
                     "Verify GHCR authentication, image tag/SHA and package permissions before retrying.", true);

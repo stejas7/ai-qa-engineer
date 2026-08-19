@@ -8,6 +8,7 @@ package com.aiqa.deployment;
 public enum DeploymentFailureType {
     LOW_DISK,
     SSH_FAILURE,
+    DOCKER_BUILD_FAILURE,
     DOCKER_PULL_FAILURE,
     DOCKER_START_FAILURE,
     APP_HEALTH_FAILURE,

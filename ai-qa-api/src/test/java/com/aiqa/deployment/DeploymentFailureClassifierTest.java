@@ -30,6 +30,13 @@ class DeploymentFailureClassifierTest {
     }
 
     @Test
+    void classifiesDockerBuildFailureFromArtifactMismatch() {
+        DeploymentFailureDiagnosis result = classifier.classify("docker build failed to solve: COPY target/ai-qa-api-2.0.0.jar: no such file or directory");
+        assertEquals(DeploymentFailureType.DOCKER_BUILD_FAILURE, result.type());
+        assertFalse(result.retryRecommended());
+    }
+
+    @Test
     void classifiesDockerPullFailure() {
         DeploymentFailureDiagnosis result = classifier.classify("docker pull ghcr.io/example failed: unauthorized");
         assertEquals(DeploymentFailureType.DOCKER_PULL_FAILURE, result.type());
