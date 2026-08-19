@@ -1,6 +1,7 @@
 package com.aiqa.script;
 
 import com.aiqa.automation.AutomationResponse;
+import com.aiqa.execution.ExecutionResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,6 +47,11 @@ public class AutomationScriptController {
     @PostMapping("/{id}/generate")
     public AutomationResponse generate(@PathVariable UUID id, @RequestBody(required = false) AutomationScriptService.GenerateScriptRequest request) {
         return service.generate(id, request);
+    }
+
+    @PostMapping("/{id}/execute")
+    public ExecutionResponse execute(@PathVariable UUID id, @RequestBody(required = false) AutomationScriptService.ExecuteScriptRequest request) {
+        return service.execute(id, request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
