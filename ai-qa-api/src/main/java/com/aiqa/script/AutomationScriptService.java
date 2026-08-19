@@ -5,6 +5,9 @@ import com.aiqa.application.ApplicationTargetRepository;
 import com.aiqa.automation.AutomationRequest;
 import com.aiqa.automation.AutomationResponse;
 import com.aiqa.automation.PlaywrightAutomationService;
+import com.aiqa.execution.ExecutionRequest;
+import com.aiqa.execution.ExecutionResponse;
+import com.aiqa.execution.ExecutionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,18 +21,26 @@ public class AutomationScriptService {
     private final AutomationScriptRepository scripts;
     private final ApplicationTargetRepository products;
     private final PlaywrightAutomationService generator;
+    private final ExecutionService execution;
 
     @Autowired
     public AutomationScriptService(AutomationScriptRepository scripts, ApplicationTargetRepository products,
-                                   PlaywrightAutomationService generator) {
+                                   PlaywrightAutomationService generator, ExecutionService execution) {
         this.scripts = scripts;
         this.products = products;
         this.generator = generator;
+        this.execution = execution;
     }
 
-    /** Test-friendly constructor for lifecycle unit tests that do not generate code. */
+    /** Test-friendly constructor for lifecycle unit tests. */
     AutomationScriptService(AutomationScriptRepository scripts, ApplicationTargetRepository products) {
-        this(scripts, products, null);
+        this(scripts, products, null, null);
+    }
+
+    /** Test-friendly constructor for code-generation unit tests. */
+    AutomationScriptService(AutomationScriptRepository scripts, ApplicationTargetRepository products,
+                            PlaywrightAutomationService generator) {
+        this(scripts, products, generator, null);
     }
 
     public AutomationScript create(CreateScriptRequest request) {
@@ -65,8 +76,7 @@ public class AutomationScriptService {
 
     /** Generates inspectable Java/Playwright testware only after explicit approval. */
     public AutomationResponse generate(UUID id, GenerateScriptRequest request) {
-        AutomationScript script = requireScript(id);
-        if (!"APPROVED".equals(script.getStatus())) throw new IllegalStateException("script must be approved before generation");
+        AutomationScript script = requireApprovedScript(id);
         if (generator == null) throw new IllegalStateException("automation generator unavailable");
         ApplicationTarget product = requireOwnedActiveProduct(script.getCompanyId(), script.getProductId());
         String url = request != null && request.url() != null && !request.url().isBlank() ? request.url().trim() : product.getBaseUrl();
@@ -78,9 +88,27 @@ public class AutomationScriptService {
                 script.getSteps(), expected));
     }
 
+    /** Executes the approved managed script through the existing deterministic engine, including M6 evidence/healing. */
+    public ExecutionResponse execute(UUID id, ExecuteScriptRequest request) {
+        AutomationScript script = requireApprovedScript(id);
+        if (execution == null) throw new IllegalStateException("execution engine unavailable");
+        ApplicationTarget product = requireOwnedActiveProduct(script.getCompanyId(), script.getProductId());
+        String expected = request == null || request.expectedResult() == null || request.expectedResult().isBlank()
+                ? null : request.expectedResult().trim();
+        Boolean headless = request == null ? Boolean.TRUE : request.headless();
+        return execution.run(new ExecutionRequest("AT-" + id + "-v" + script.getVersion(), product.getBaseUrl(),
+                script.getSteps(), expected, headless));
+    }
+
     private AutomationScript requireScript(UUID id) {
         if (id == null) throw new IllegalArgumentException("script id is required");
         return scripts.findById(id).orElseThrow(() -> new IllegalArgumentException("script not found"));
+    }
+
+    private AutomationScript requireApprovedScript(UUID id) {
+        AutomationScript script = requireScript(id);
+        if (!"APPROVED".equals(script.getStatus())) throw new IllegalStateException("script must be approved before execution/generation");
+        return script;
     }
 
     private ApplicationTarget requireOwnedActiveProduct(UUID companyId, UUID productId) {
@@ -109,4 +137,5 @@ public class AutomationScriptService {
     public record CreateScriptRequest(UUID companyId, UUID productId, String name, List<String> steps) {}
     public record ReviseScriptRequest(List<String> steps) {}
     public record GenerateScriptRequest(String url, String expectedResult) {}
+    public record ExecuteScriptRequest(String expectedResult, Boolean headless) {}
 }
