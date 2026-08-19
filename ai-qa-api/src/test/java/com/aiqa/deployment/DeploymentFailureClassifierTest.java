@@ -51,6 +51,13 @@ class DeploymentFailureClassifierTest {
     }
 
     @Test
+    void classifiesMissingPreviousImageAsRollbackFailure() {
+        DeploymentFailureDiagnosis result = classifier.classify("M8_ROLLBACK_STATUS=SKIPPED_NO_PREVIOUS_IMAGE");
+        assertEquals(DeploymentFailureType.ROLLBACK_FAILURE, result.type());
+        assertFalse(result.retryRecommended());
+    }
+
+    @Test
     void classifiesApplicationHealthFailure() {
         DeploymentFailureDiagnosis result = classifier.classify("Auravis container failed health verification at /actuator/health");
         assertEquals(DeploymentFailureType.APP_HEALTH_FAILURE, result.type());

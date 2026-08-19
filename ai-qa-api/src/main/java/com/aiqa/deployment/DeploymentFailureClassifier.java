@@ -33,7 +33,7 @@ public class DeploymentFailureClassifier {
             return diagnosis(DeploymentFailureType.DOCKER_START_FAILURE,
                     "Inspect docker compose status and ai-qa-api logs, then rollback to the previous image if startup cannot be recovered safely.", false);
         }
-        if (containsAny(text, "m8_rollback_status=failed", "rollback did not recover", "rollback failed")) {
+        if (containsAny(text, "m8_rollback_status=failed", "m8_rollback_status=skipped_no_previous_image", "rollback did not recover", "rollback failed", "rollback cannot be verified")) {
             return diagnosis(DeploymentFailureType.ROLLBACK_FAILURE,
                     "Stop automatic retries, preserve rollback health/runtime evidence, and inspect the previous image plus container logs before any further deployment change.", false);
         }
