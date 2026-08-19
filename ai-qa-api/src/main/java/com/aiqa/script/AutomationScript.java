@@ -42,6 +42,9 @@ public class AutomationScript {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    @Column(nullable = false)
+    private Instant updatedAt = Instant.now();
+
     protected AutomationScript() {}
 
     public AutomationScript(UUID companyId, UUID productId, String name, List<String> steps) {
@@ -59,5 +62,18 @@ public class AutomationScript {
     public String getStatus() { return status; }
     public List<String> getSteps() { return List.copyOf(steps); }
     public Instant getCreatedAt() { return createdAt; }
-    public void approve() { this.status = "APPROVED"; }
+    public Instant getUpdatedAt() { return updatedAt; }
+
+    public void approve() {
+        this.status = "APPROVED";
+        this.updatedAt = Instant.now();
+    }
+
+    /** Any maintenance change creates the next reviewable version and revokes prior approval. */
+    public void revise(List<String> revisedSteps) {
+        this.steps = new ArrayList<>(revisedSteps);
+        this.version++;
+        this.status = "DRAFT";
+        this.updatedAt = Instant.now();
+    }
 }
