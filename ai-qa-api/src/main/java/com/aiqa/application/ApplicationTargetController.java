@@ -1,5 +1,6 @@
 package com.aiqa.application;
 
+import com.aiqa.company.Company;
 import com.aiqa.company.CompanyRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -42,8 +43,13 @@ public class ApplicationTargetController {
 
     @PostMapping
     public ApplicationTarget create(@Valid @RequestBody CreateApplicationRequest request) {
-        if (request.companyId() != null && !companyRepository.existsById(request.companyId())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown companyId");
+        if (request.companyId() != null) {
+            Company company = companyRepository.findById(request.companyId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown companyId"));
+            if (!company.isActive()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Cannot register a product under an inactive company");
+            }
         }
         return repository.save(new ApplicationTarget(
                 request.name(), request.baseUrl(), request.environment(), request.authType(), request.companyId()));
