@@ -1,5 +1,6 @@
 package com.aiqa.credential;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -32,6 +33,7 @@ public class CredentialProfile {
     @Column(nullable = false)
     private CredentialType type;
 
+    @JsonIgnore
     @Column(nullable = false)
     private String secretReference;
 
