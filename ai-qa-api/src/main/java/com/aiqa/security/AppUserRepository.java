@@ -10,5 +10,4 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
     Optional<AppUser> findByEmailIgnoreCase(String email);
     boolean existsByEmailIgnoreCase(String email);
     List<AppUser> findByCompanyIdOrderByCreatedAtAsc(UUID companyId);
-    Optional<AppUser> findFirstByRole(UserRole role);
 }
