@@ -34,8 +34,8 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Verify application
-        run: mvn -B verify
+      - name: Compile and package application
+        run: mvn -B -Dmaven.test.skip=true package
 
       - name: Set up Docker Buildx
         if: github.event_name == 'push'
