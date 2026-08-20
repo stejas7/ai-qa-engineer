@@ -11,4 +11,5 @@ public interface ApplicationTargetRepository extends JpaRepository<ApplicationTa
     List<ApplicationTarget> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
     List<ApplicationTarget> findByCompanyIdAndActiveTrueOrderByCreatedAtDesc(UUID companyId);
     boolean existsByCompanyIdAndNameIgnoreCase(UUID companyId, String name);
+    boolean existsByCompanyIdAndNameIgnoreCaseAndEnvironmentIgnoreCase(UUID companyId, String name, String environment);
 }
