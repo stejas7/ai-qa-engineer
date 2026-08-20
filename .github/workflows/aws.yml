@@ -83,8 +83,8 @@ jobs:
           AI_UAT_PLATFORM_ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
-          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
+          GITHUB_CLIENT_ID: ${{ secrets.AI_UAT_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.AI_UAT_GITHUB_CLIENT_SECRET }}
         run: |
           set -Eeuo pipefail
           SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
