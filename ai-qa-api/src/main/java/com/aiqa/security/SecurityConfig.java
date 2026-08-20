@@ -11,10 +11,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
-/**
- * M14-M17 security foundation.
- * Legacy product APIs remain reachable until M18 completes tenant-aware authorization migration.
- */
+/** M14-M18 security foundation with tenant-scoped UAT launch protection. */
 @Configuration
 public class SecurityConfig {
 
@@ -49,7 +46,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/company/users/**").hasRole("COMPANY_ADMIN")
-                        .requestMatchers("/api/company/products/**", "/api/company/credentials/**").authenticated()
+                        .requestMatchers("/api/company/products/**", "/api/company/credentials/**", "/api/company/uat/**").authenticated()
                         .anyRequest().permitAll())
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(form -> form.disable());
