@@ -1,4 +1,4 @@
-name: Deploy Auravis to AWS EC2
+name: Deploy AI UAT Engineer to AWS EC2
 
 on:
   workflow_run:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy Auravis to EC2
+    name: Deploy AI UAT Engineer to EC2
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 14
@@ -79,9 +79,19 @@ jobs:
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE: ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
+          AI_UAT_PLATFORM_ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
+          AI_UAT_PLATFORM_ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
         run: |
           set -Eeuo pipefail
           SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+
+          if [ -z "${AI_UAT_PLATFORM_ADMIN_EMAIL:-}" ] || [ -z "${AI_UAT_PLATFORM_ADMIN_PASSWORD:-}" ]; then
+            echo "ERROR: Platform Admin deployment secrets are required"
+            exit 1
+          fi
+
+          PLATFORM_ADMIN_EMAIL_B64="$(printf '%s' "$AI_UAT_PLATFORM_ADMIN_EMAIL" | base64 -w0)"
+          PLATFORM_ADMIN_PASSWORD_B64="$(printf '%s' "$AI_UAT_PLATFORM_ADMIN_PASSWORD" | base64 -w0)"
 
           if ! printf '%s' "$GHCR_TOKEN" | timeout 90 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"; then
             echo "M8_FAILURE_CLASS=DOCKER_PULL_FAILURE"
@@ -90,14 +100,14 @@ jobs:
           fi
 
           set +e
-          timeout 5m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "IMAGE='$IMAGE' bash -se" <<'REMOTE_SCRIPT'
+          timeout 5m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "IMAGE='$IMAGE' PLATFORM_ADMIN_EMAIL_B64='$PLATFORM_ADMIN_EMAIL_B64' PLATFORM_ADMIN_PASSWORD_B64='$PLATFORM_ADMIN_PASSWORD_B64' bash -se" <<'REMOTE_SCRIPT'
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
           timeout 90 git fetch --prune origin main
           git reset --hard origin/main
 
           previous_image="$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)"
-          echo "$previous_image" >/tmp/auravis-previous-image
+          echo "$previous_image" >/tmp/ai-uat-previous-image
 
           sudo docker container prune -f || true
           sudo docker image prune -af || true
@@ -109,6 +119,10 @@ jobs:
           fi
 
           export AI_QA_IMAGE="$IMAGE"
+          export AI_UAT_PLATFORM_ADMIN_EMAIL="$(printf '%s' "$PLATFORM_ADMIN_EMAIL_B64" | base64 -d)"
+          export AI_UAT_PLATFORM_ADMIN_PASSWORD="$(printf '%s' "$PLATFORM_ADMIN_PASSWORD_B64" | base64 -d)"
+          unset PLATFORM_ADMIN_EMAIL_B64 PLATFORM_ADMIN_PASSWORD_B64
+
           if ! sudo -E docker compose up -d --remove-orphans; then
             echo "M8_REMOTE_FAILURE=DOCKER_START_FAILURE"
             echo "==> Docker compose status"
@@ -127,7 +141,7 @@ jobs:
             exit 1
           elif [ "$rc" -eq 32 ]; then
             echo "M8_FAILURE_CLASS=DOCKER_START_FAILURE"
-            echo "ERROR: Docker Compose failed to start Auravis; compose status and backend logs were captured above"
+            echo "ERROR: Docker Compose failed to start AI UAT Engineer; compose status and backend logs were captured above"
             exit 1
           elif [ "$rc" -ne 0 ]; then
             echo "M8_FAILURE_CLASS=UNKNOWN"
@@ -151,10 +165,10 @@ jobs:
           cd ~/ai-qa-engineer
 
           rollback_previous_image() {
-            previous_image="$(cat /tmp/auravis-previous-image 2>/dev/null || true)"
+            previous_image="$(cat /tmp/ai-uat-previous-image 2>/dev/null || true)"
             if [ -z "$previous_image" ]; then
               echo "M8_ROLLBACK_STATUS=SKIPPED_NO_PREVIOUS_IMAGE"
-              echo "No previous Auravis image recorded; rollback cannot be verified"
+              echo "No previous AI UAT Engineer image recorded; rollback cannot be verified"
               return 1
             fi
 
@@ -232,7 +246,7 @@ jobs:
 
           if [ "$rc" -eq 21 ]; then
             echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
-            echo "ERROR: Auravis container failed health verification; rollback to the previous image was verified healthy with a valid Spring AI runtime"
+            echo "ERROR: AI UAT Engineer container failed health verification; rollback to the previous image was verified healthy with a valid Spring AI runtime"
             exit 1
           elif [ "$rc" -eq 22 ]; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
@@ -240,7 +254,7 @@ jobs:
             exit 1
           elif [ "$rc" -eq 23 ]; then
             echo "M8_FAILURE_CLASS=APP_HEALTH_FAILURE"
-            echo "ERROR: Auravis health verification failed and previous-image rollback did not recover health/runtime verification"
+            echo "ERROR: AI UAT Engineer health verification failed and previous-image rollback did not recover health/runtime verification"
             exit 1
           elif [ "$rc" -eq 24 ]; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
@@ -274,8 +288,6 @@ jobs:
         timeout-minutes: 1
         run: |
           set -Eeuo pipefail
-          curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/stats.json "$PUBLIC_BASE_URL/api/pipeline/stats"
-          cat /tmp/stats.json
           if ! curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/ai-runtime.json "$PUBLIC_BASE_URL/api/ai/runtime"; then
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
             exit 1
@@ -285,6 +297,8 @@ jobs:
             echo "M8_FAILURE_CLASS=RAG_RUNTIME_FAILURE"
             exit 1
           }
+          curl --connect-timeout 5 --max-time 20 -fsS -o /tmp/sso-providers.json "$PUBLIC_BASE_URL/api/auth/sso/providers"
+          cat /tmp/sso-providers.json
           echo "==> DEPLOYMENT SUCCESS"
 
       - name: M8 deployment diagnosis
@@ -308,7 +322,7 @@ jobs:
             echo "**Action:** Verify Spring AI configuration, API credentials and RAG/vector dependencies." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "**Classification:** SUCCESS" >> "$GITHUB_STEP_SUMMARY"
-            echo "Auravis UAT, public health and Spring AI runtime checks passed." >> "$GITHUB_STEP_SUMMARY"
+            echo "AI UAT Engineer public health and Spring AI runtime checks passed." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Remove temporary SSH key
