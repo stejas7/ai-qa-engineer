@@ -39,7 +39,7 @@ class TenantUatLaunchServiceTest {
     void launchesUsingServerResolvedTenantAndTarget() throws Exception {
         UUID companyId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
-        AppUser actor = actor(companyId, UserRole.TESTER, true);
+        AppUser actor = actor(companyId, UserRole.TESTER);
         ApplicationTarget target = target(companyId, true, "https://uat.example.test");
         MockMultipartFile file = new MockMultipartFile("file", "story.txt", "text/plain", "Customer can checkout".getBytes(StandardCharsets.UTF_8));
         PipelineRun run = new PipelineRun(companyId.toString(), "story.txt");
@@ -57,7 +57,7 @@ class TenantUatLaunchServiceTest {
     @Test
     void deniesCrossTenantLaunch() {
         UUID targetId = UUID.randomUUID();
-        when(users.findByEmailIgnoreCase("tester@example.test")).thenReturn(Optional.of(actor(UUID.randomUUID(), UserRole.TESTER, true)));
+        when(users.findByEmailIgnoreCase("tester@example.test")).thenReturn(Optional.of(actor(UUID.randomUUID(), UserRole.TESTER)));
         when(targets.findById(targetId)).thenReturn(Optional.of(target(UUID.randomUUID(), true, "https://other.example.test")));
 
         assertThrows(SecurityException.class, () -> service.launch("tester@example.test", targetId, requirement()));
@@ -66,7 +66,7 @@ class TenantUatLaunchServiceTest {
 
     @Test
     void viewerCannotExecuteUat() {
-        when(users.findByEmailIgnoreCase("viewer@example.test")).thenReturn(Optional.of(actor(UUID.randomUUID(), UserRole.VIEWER, true)));
+        when(users.findByEmailIgnoreCase("viewer@example.test")).thenReturn(Optional.of(actor(UUID.randomUUID(), UserRole.VIEWER)));
 
         assertThrows(SecurityException.class, () -> service.launch("viewer@example.test", UUID.randomUUID(), requirement()));
         verifyNoInteractions(targets, pipeline);
@@ -76,7 +76,7 @@ class TenantUatLaunchServiceTest {
     void inactiveTargetCannotExecuteUat() {
         UUID companyId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
-        when(users.findByEmailIgnoreCase("tester@example.test")).thenReturn(Optional.of(actor(companyId, UserRole.TESTER, true)));
+        when(users.findByEmailIgnoreCase("tester@example.test")).thenReturn(Optional.of(actor(companyId, UserRole.TESTER)));
         when(targets.findById(targetId)).thenReturn(Optional.of(target(companyId, false, "https://uat.example.test")));
 
         assertThrows(IllegalStateException.class, () -> service.launch("tester@example.test", targetId, requirement()));
@@ -87,21 +87,12 @@ class TenantUatLaunchServiceTest {
         return new MockMultipartFile("file", "story.txt", "text/plain", "requirement".getBytes(StandardCharsets.UTF_8));
     }
 
-    private AppUser actor(UUID companyId, UserRole role, boolean active) {
-        AppUser user = new AppUser();
-        user.setEmail(role.name().toLowerCase() + "@example.test");
-        user.setCompanyId(companyId);
-        user.setRole(role);
-        user.setActive(active);
-        return user;
+    private AppUser actor(UUID companyId, UserRole role) {
+        return new AppUser(companyId, role.name().toLowerCase() + "@example.test", "hash", role);
     }
 
     private ApplicationTarget target(UUID companyId, boolean active, String baseUrl) {
-        ApplicationTarget target = new ApplicationTarget();
-        target.setCompanyId(companyId);
-        target.setName("Checkout");
-        target.setEnvironment("UAT");
-        target.setBaseUrl(baseUrl);
+        ApplicationTarget target = new ApplicationTarget("Checkout", baseUrl, "UAT", "NONE", companyId);
         target.setActive(active);
         return target;
     }
