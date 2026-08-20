@@ -1,5 +1,6 @@
 package com.aiqa.platform;
 
+import com.aiqa.application.ApplicationTarget;
 import com.aiqa.application.ApplicationTargetRepository;
 import com.aiqa.company.Company;
 import com.aiqa.company.CompanyRepository;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -101,6 +104,41 @@ public class PlatformOversightController {
                 round(avgP95Ms), round(avgThroughput), round(avgErrorRate));
     }
 
+    /**
+     * M20.7 platform activity audit timeline derived from persisted domain records.
+     * This is operational traceability, not an immutable compliance ledger.
+     */
+    @GetMapping("/audit")
+    public List<AuditEventView> audit() {
+        List<AuditEventView> events = new ArrayList<>();
+
+        for (Company company : companies.findAll()) {
+            events.add(new AuditEventView("COMPANY_REGISTERED", company.getId().toString(), company.getName(),
+                    "Company workspace registered", company.getCreatedAt()));
+        }
+        for (ApplicationTarget product : products.findAllByOrderByCreatedAtDesc()) {
+            events.add(new AuditEventView("PRODUCT_REGISTERED", safeId(product.getCompanyId()), product.getName(),
+                    product.getEnvironment() + " product environment registered", product.getCreatedAt()));
+        }
+        for (AppUser user : users.findAll()) {
+            events.add(new AuditEventView("USER_REGISTERED", safeId(user.getCompanyId()), user.getEmail(),
+                    user.getRole().name() + " user registered", user.getCreatedAt()));
+        }
+        for (PipelineRun run : runs.findAllByOrderByCreatedAtDesc()) {
+            events.add(new AuditEventView("UAT_" + run.getStatus().toUpperCase(), run.getCompany(), run.getFileName(),
+                    run.getCurrentStage(), run.getCompletedAt() == null ? run.getCreatedAt() : run.getCompletedAt()));
+        }
+        for (LoadTestRun load : loadTests.findTop50ByOrderByCreatedAtDesc()) {
+            events.add(new AuditEventView("LOAD_TEST", "platform", "Performance validation",
+                    load.isSloPassed() ? "Load-test SLO passed" : "Load-test SLO failed", load.getCreatedAt()));
+        }
+
+        return events.stream()
+                .sorted(Comparator.comparing(AuditEventView::occurredAt).reversed())
+                .limit(200)
+                .toList();
+    }
+
     private OperationView operationView(PipelineRun run) {
         Long durationMillis = run.getCompletedAt() == null ? null : Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis();
         return new OperationView(run.getId(), run.getCompany(), run.getFileName(), run.getStatus(),
@@ -114,6 +152,7 @@ public class PlatformOversightController {
         return safe.length() <= 500 ? safe : safe.substring(0, 500) + "…";
     }
 
+    private String safeId(UUID value) { return value == null ? "unassigned" : value.toString(); }
     private double round(double value) { return Math.round(value * 100.0) / 100.0; }
 
     public record CompanyView(UUID id, String name, String slug, boolean active, int products, int users) {}
@@ -126,4 +165,5 @@ public class PlatformOversightController {
     public record PerformanceView(long pipelineRuns, long averagePipelineDurationMs, long maxPipelineDurationMs,
                                   long loadTestRuns, long loadTestSloPassed, double averageLoadP95Ms,
                                   double averageThroughputPerSecond, double averageLoadErrorRatePercent) {}
+    public record AuditEventView(String eventType, String scopeId, String subject, String detail, Instant occurredAt) {}
 }
