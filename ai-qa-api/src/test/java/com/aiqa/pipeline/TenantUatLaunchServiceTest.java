@@ -2,6 +2,7 @@ package com.aiqa.pipeline;
 
 import com.aiqa.application.ApplicationTarget;
 import com.aiqa.application.ApplicationTargetRepository;
+import com.aiqa.credential.RuntimeCredentialResolver;
 import com.aiqa.security.AppUser;
 import com.aiqa.security.AppUserRepository;
 import com.aiqa.security.UserRole;
@@ -27,6 +28,7 @@ class TenantUatLaunchServiceTest {
     @Mock PipelineRunRepository runs;
     @Mock ApplicationTargetRepository targets;
     @Mock AppUserRepository users;
+    @Mock RuntimeCredentialResolver credentials;
 
     private TenantUatLaunchService service;
 
@@ -81,6 +83,28 @@ class TenantUatLaunchServiceTest {
 
         assertThrows(IllegalStateException.class, () -> service.launch("tester@example.test", targetId, requirement()));
         verifyNoInteractions(pipeline);
+    }
+
+    @Test
+    void authenticatedTargetFailsClosedWhenRuntimeCredentialIsNotReady() {
+        UUID companyId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        AppUser actor = actor(companyId, UserRole.TESTER);
+        ApplicationTarget target = mock(ApplicationTarget.class);
+        when(target.getCompanyId()).thenReturn(companyId);
+        when(target.isActive()).thenReturn(true);
+        when(target.getAuthType()).thenReturn("USERNAME_PASSWORD");
+        when(target.getId()).thenReturn(targetId);
+        when(users.findByEmailIgnoreCase("tester@example.test")).thenReturn(Optional.of(actor));
+        when(targets.findById(targetId)).thenReturn(Optional.of(target));
+        when(credentials.readiness(companyId, targetId))
+                .thenReturn(new RuntimeCredentialResolver.CredentialReadiness(true, false, "Runtime secret is not configured"));
+
+        TenantUatLaunchService credentialAware = new TenantUatLaunchService(extractor, pipeline, runs, targets, users, credentials);
+
+        assertThrows(IllegalStateException.class,
+                () -> credentialAware.launch("tester@example.test", targetId, requirement()));
+        verifyNoInteractions(extractor, runs, pipeline);
     }
 
     private MockMultipartFile requirement() {
