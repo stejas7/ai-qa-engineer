@@ -2,6 +2,7 @@ package com.aiqa.credential;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -18,6 +19,7 @@ public class RuntimeCredentialResolver {
     private final ObjectMapper objectMapper;
     private final Function<String, String> environment;
 
+    @Autowired
     public RuntimeCredentialResolver(CredentialProfileRepository profiles, ObjectMapper objectMapper) {
         this(profiles, objectMapper, System::getenv);
     }
