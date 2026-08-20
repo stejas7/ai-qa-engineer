@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Persisted application identity bound to a company tenant. */
+/** Persisted M14 application identity bound to a company tenant. */
 @Entity
 @Table(name = "ai_uat_users")
 public class AppUser {
@@ -56,11 +56,4 @@ public class AppUser {
     public boolean isActive() { return active; }
     public Instant getCreatedAt() { return createdAt; }
     public void deactivate() { this.active = false; }
-
-    void synchronizePlatformAdmin(String email, String passwordHash) {
-        if (role != UserRole.PLATFORM_ADMIN) throw new IllegalStateException("Only PLATFORM_ADMIN can be synchronized");
-        this.email = email;
-        this.passwordHash = passwordHash;
-        this.active = true;
-    }
 }
