@@ -81,6 +81,10 @@ jobs:
           IMAGE: ${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
           AI_UAT_PLATFORM_ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
           AI_UAT_PLATFORM_ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
         run: |
           set -Eeuo pipefail
           SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
@@ -93,6 +97,16 @@ jobs:
           PLATFORM_ADMIN_EMAIL_B64="$(printf '%s' "$AI_UAT_PLATFORM_ADMIN_EMAIL" | base64 -w0)"
           PLATFORM_ADMIN_PASSWORD_B64="$(printf '%s' "$AI_UAT_PLATFORM_ADMIN_PASSWORD" | base64 -w0)"
 
+          SSO_ENABLED=false
+          if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && [ -n "${GITHUB_CLIENT_ID:-}" ] && [ -n "${GITHUB_CLIENT_SECRET:-}" ]; then
+            SSO_ENABLED=true
+          fi
+          GOOGLE_CLIENT_ID_B64="$(printf '%s' "${GOOGLE_CLIENT_ID:-}" | base64 -w0)"
+          GOOGLE_CLIENT_SECRET_B64="$(printf '%s' "${GOOGLE_CLIENT_SECRET:-}" | base64 -w0)"
+          GITHUB_CLIENT_ID_B64="$(printf '%s' "${GITHUB_CLIENT_ID:-}" | base64 -w0)"
+          GITHUB_CLIENT_SECRET_B64="$(printf '%s' "${GITHUB_CLIENT_SECRET:-}" | base64 -w0)"
+          echo "SSO configured: $SSO_ENABLED"
+
           if ! printf '%s' "$GHCR_TOKEN" | timeout 90 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"; then
             echo "M8_FAILURE_CLASS=DOCKER_PULL_FAILURE"
             echo "ERROR: GHCR authentication failed"
@@ -100,7 +114,7 @@ jobs:
           fi
 
           set +e
-          timeout 5m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "IMAGE='$IMAGE' PLATFORM_ADMIN_EMAIL_B64='$PLATFORM_ADMIN_EMAIL_B64' PLATFORM_ADMIN_PASSWORD_B64='$PLATFORM_ADMIN_PASSWORD_B64' bash -se" <<'REMOTE_SCRIPT'
+          timeout 5m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "IMAGE='$IMAGE' PLATFORM_ADMIN_EMAIL_B64='$PLATFORM_ADMIN_EMAIL_B64' PLATFORM_ADMIN_PASSWORD_B64='$PLATFORM_ADMIN_PASSWORD_B64' SSO_ENABLED='$SSO_ENABLED' GOOGLE_CLIENT_ID_B64='$GOOGLE_CLIENT_ID_B64' GOOGLE_CLIENT_SECRET_B64='$GOOGLE_CLIENT_SECRET_B64' GITHUB_CLIENT_ID_B64='$GITHUB_CLIENT_ID_B64' GITHUB_CLIENT_SECRET_B64='$GITHUB_CLIENT_SECRET_B64' bash -se" <<'REMOTE_SCRIPT'
           set -Eeuo pipefail
           cd ~/ai-qa-engineer
           timeout 90 git fetch --prune origin main
@@ -121,7 +135,22 @@ jobs:
           export AI_QA_IMAGE="$IMAGE"
           export AI_UAT_PLATFORM_ADMIN_EMAIL="$(printf '%s' "$PLATFORM_ADMIN_EMAIL_B64" | base64 -d)"
           export AI_UAT_PLATFORM_ADMIN_PASSWORD="$(printf '%s' "$PLATFORM_ADMIN_PASSWORD_B64" | base64 -d)"
-          unset PLATFORM_ADMIN_EMAIL_B64 PLATFORM_ADMIN_PASSWORD_B64
+
+          if [ "$SSO_ENABLED" = true ]; then
+            export SPRING_PROFILES_ACTIVE=sso
+            export GOOGLE_CLIENT_ID="$(printf '%s' "$GOOGLE_CLIENT_ID_B64" | base64 -d)"
+            export GOOGLE_CLIENT_SECRET="$(printf '%s' "$GOOGLE_CLIENT_SECRET_B64" | base64 -d)"
+            export GITHUB_CLIENT_ID="$(printf '%s' "$GITHUB_CLIENT_ID_B64" | base64 -d)"
+            export GITHUB_CLIENT_SECRET="$(printf '%s' "$GITHUB_CLIENT_SECRET_B64" | base64 -d)"
+          else
+            export SPRING_PROFILES_ACTIVE=""
+            export GOOGLE_CLIENT_ID=""
+            export GOOGLE_CLIENT_SECRET=""
+            export GITHUB_CLIENT_ID=""
+            export GITHUB_CLIENT_SECRET=""
+          fi
+
+          unset PLATFORM_ADMIN_EMAIL_B64 PLATFORM_ADMIN_PASSWORD_B64 GOOGLE_CLIENT_ID_B64 GOOGLE_CLIENT_SECRET_B64 GITHUB_CLIENT_ID_B64 GITHUB_CLIENT_SECRET_B64
 
           if ! sudo -E docker compose up -d --remove-orphans; then
             echo "M8_REMOTE_FAILURE=DOCKER_START_FAILURE"
