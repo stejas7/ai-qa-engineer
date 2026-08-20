@@ -33,7 +33,8 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http,
                                             ObjectProvider<ClientRegistrationRepository> registrations,
-                                            ExistingUserOAuth2SuccessHandler ssoSuccessHandler) throws Exception {
+                                            ExistingUserOAuth2SuccessHandler ssoSuccessHandler,
+                                            VerifiedEmailOAuth2UserService oauth2UserService) throws Exception {
         http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/sso/**").permitAll()
@@ -49,6 +50,7 @@ public class SecurityConfig {
             http.oauth2Login(oauth -> oauth
                     .authorizationEndpoint(endpoint -> endpoint.baseUri("/api/auth/sso/authorization"))
                     .redirectionEndpoint(endpoint -> endpoint.baseUri("/api/auth/sso/callback/*"))
+                    .userInfoEndpoint(userInfo -> userInfo.userService(oauth2UserService))
                     .successHandler(ssoSuccessHandler)
                     .failureUrl("/account?error=sso"));
         }
