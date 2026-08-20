@@ -6,6 +6,7 @@ import com.aiqa.healing.HealingDecisionService;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.AriaRole;
 import com.microsoft.playwright.options.WaitUntilState;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
@@ -14,25 +15,30 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/**
- * Deterministic browser execution engine used by AI UAT Engineer.
- * M6 adds conservative self-healing: only recoverable automation failures may be
- * retried, every decision is persisted, and business/assertion failures remain untouched.
- *
- * @author Tejas Shah
- */
+/** Deterministic browser execution engine used by AI UAT Engineer. */
 @Service
 public class ExecutionService {
     private final ExecutionRecordRepository records;
     private final FailureClassifier failureClassifier;
     private final HealingDecisionService healingDecisions;
+    private final ExecutionEvidenceStore evidenceStore;
 
+    /** Compatibility constructor retained for unit tests that do not exercise evidence persistence. */
     public ExecutionService(ExecutionRecordRepository records,
                             FailureClassifier failureClassifier,
                             HealingDecisionService healingDecisions) {
+        this(records, failureClassifier, healingDecisions, null);
+    }
+
+    @Autowired
+    public ExecutionService(ExecutionRecordRepository records,
+                            FailureClassifier failureClassifier,
+                            HealingDecisionService healingDecisions,
+                            ExecutionEvidenceStore evidenceStore) {
         this.records = records;
         this.failureClassifier = failureClassifier;
         this.healingDecisions = healingDecisions;
+        this.evidenceStore = evidenceStore;
     }
 
     public ExecutionResponse run(ExecutionRequest request) {
@@ -53,14 +59,12 @@ public class ExecutionService {
                     for (String step : request.steps() == null ? List.<String>of() : request.steps()) {
                         executeWithHealing(page, request.testId(), step, evidenceDir, beforeFile);
                     }
-                    if (request.expectedResult() != null && !request.expectedResult().isBlank()) {
-                        verify(page, request.expectedResult());
-                    }
+                    if (request.expectedResult() != null && !request.expectedResult().isBlank()) verify(page, request.expectedResult());
                     capture(page, evidenceDir.resolve(afterFile));
                 }
             }
             return persist(request, "PASS", start, evidenceIfPresent(evidenceDir, afterFile),
-                    "Execution completed; controlled M6 healing applied only when policy allowed it.");
+                    "Execution completed; controlled healing applied only when policy allowed it.");
         } catch (Exception e) {
             try {
                 if (page != null && !page.isClosed()) capture(page, evidenceDir.resolve(afterFile));
@@ -79,13 +83,11 @@ public class ExecutionService {
                 healingDecisions.evaluate(testId, message, "No repair: protected failure category", 0.0);
                 throw firstFailure;
             }
-
             capture(page, evidenceDir.resolve(beforeFile));
             String repair = repairDescription(category, step);
             double confidence = healingConfidence(category);
             HealingDecisionService.HealingDecision decision = healingDecisions.evaluate(testId, message, repair, confidence);
             if (!"AUTO_HEAL_ALLOWED".equals(decision.decision())) throw firstFailure;
-
             perform(page, step, true);
         }
     }
@@ -107,51 +109,26 @@ public class ExecutionService {
 
     private void capture(Page page, Path destination) {
         page.screenshot(new Page.ScreenshotOptions().setPath(destination.toAbsolutePath()).setFullPage(true));
+        if (evidenceStore != null) evidenceStore.persist(destination);
     }
 
     private void perform(Page page, String raw, boolean healingRetry) {
         String step = raw == null ? "" : raw.trim();
         String lower = step.toLowerCase(Locale.ROOT);
         if (step.isBlank() || lower.startsWith("open ") || lower.equals("open the application")) return;
-
         List<String> quoted = quotedValues(step);
         if ((lower.startsWith("enter ") || lower.startsWith("fill ")) && quoted.size() >= 2) {
-            String value = quoted.get(0);
-            String label = quoted.get(1);
+            String value = quoted.get(0), label = quoted.get(1);
             if (healingRetry) page.getByPlaceholder(label, new Page.GetByPlaceholderOptions().setExact(false)).fill(value);
             else page.getByLabel(label, new Page.GetByLabelOptions().setExact(false)).fill(value);
             return;
         }
-        if (lower.startsWith("select ") && quoted.size() >= 2) {
-            page.getByLabel(quoted.get(1), new Page.GetByLabelOptions().setExact(false)).selectOption(quoted.get(0));
-            return;
-        }
-        if ((lower.startsWith("check ") || lower.startsWith("tick ")) && !quoted.isEmpty()) {
-            page.getByLabel(quoted.get(0), new Page.GetByLabelOptions().setExact(false)).check();
-            return;
-        }
-        if (lower.contains("enter email")) {
-            String value = valueInQuotes(step, "test@example.com");
-            if (healingRetry) page.locator("input[type=email]").first().fill(value);
-            else page.getByLabel("Email", new Page.GetByLabelOptions().setExact(false)).fill(value);
-            return;
-        }
-        if (lower.contains("enter password")) {
-            String value = valueInQuotes(step, "Password123");
-            if (healingRetry) page.locator("input[type=password]").first().fill(value);
-            else page.getByLabel("Password", new Page.GetByLabelOptions().setExact(false)).fill(value);
-            return;
-        }
-        if (lower.startsWith("click ")) {
-            String label = !quoted.isEmpty() ? quoted.get(0) : step.substring(6).trim();
-            if (healingRetry) page.getByText(label, new Page.GetByTextOptions().setExact(false)).first().click();
-            else page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName(label).setExact(false)).click();
-            return;
-        }
-        if (lower.startsWith("verify ")) {
-            verify(page, step);
-            return;
-        }
+        if (lower.startsWith("select ") && quoted.size() >= 2) { page.getByLabel(quoted.get(1), new Page.GetByLabelOptions().setExact(false)).selectOption(quoted.get(0)); return; }
+        if ((lower.startsWith("check ") || lower.startsWith("tick ")) && !quoted.isEmpty()) { page.getByLabel(quoted.get(0), new Page.GetByLabelOptions().setExact(false)).check(); return; }
+        if (lower.contains("enter email")) { String value=valueInQuotes(step,"test@example.com"); if(healingRetry) page.locator("input[type=email]").first().fill(value); else page.getByLabel("Email",new Page.GetByLabelOptions().setExact(false)).fill(value); return; }
+        if (lower.contains("enter password")) { String value=valueInQuotes(step,"Password123"); if(healingRetry) page.locator("input[type=password]").first().fill(value); else page.getByLabel("Password",new Page.GetByLabelOptions().setExact(false)).fill(value); return; }
+        if (lower.startsWith("click ")) { String label=!quoted.isEmpty()?quoted.get(0):step.substring(6).trim(); if(healingRetry) page.getByText(label,new Page.GetByTextOptions().setExact(false)).first().click(); else page.getByRole(AriaRole.BUTTON,new Page.GetByRoleOptions().setName(label).setExact(false)).click(); return; }
+        if (lower.startsWith("verify ")) { verify(page, step); return; }
         throw new IllegalArgumentException("Unsupported automation step: " + step);
     }
 
@@ -188,19 +165,7 @@ public class ExecutionService {
         return values;
     }
 
-    private String stripQuotes(String text) {
-        if (text.length() >= 2 && text.startsWith("\"") && text.endsWith("\"")) return text.substring(1, text.length() - 1);
-        return text;
-    }
-
-    private String valueInQuotes(String text, String fallback) {
-        List<String> values = quotedValues(text);
-        return values.isEmpty() ? fallback : values.get(0);
-    }
-
-    private String rootMessage(Exception exception) {
-        Throwable root = exception;
-        while (root.getCause() != null) root = root.getCause();
-        return root.getMessage() == null ? root.toString() : root.getMessage();
-    }
+    private String stripQuotes(String text) { return text.length()>=2&&text.startsWith("\"")&&text.endsWith("\"")?text.substring(1,text.length()-1):text; }
+    private String valueInQuotes(String text, String fallback) { List<String> values=quotedValues(text); return values.isEmpty()?fallback:values.get(0); }
+    private String rootMessage(Exception exception) { Throwable root=exception; while(root.getCause()!=null) root=root.getCause(); return root.getMessage()==null?root.toString():root.getMessage(); }
 }
