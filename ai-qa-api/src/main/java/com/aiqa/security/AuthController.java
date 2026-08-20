@@ -1,12 +1,12 @@
 package com.aiqa.security;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -60,7 +60,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Map<String, Boolean> logout(HttpServletRequest request, HttpServletResponse response) {
+    public Map<String, Boolean> logout(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session != null) session.invalidate();
         SecurityContextHolder.clearContext();
@@ -70,6 +70,11 @@ public class AuthController {
     private CurrentUser current(Authentication authentication) {
         AppUser user = users.loadActiveUser(authentication.getName());
         return new CurrentUser(user.getId(), user.getCompanyId(), user.getEmail(), user.getRole().name());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<Map<String,String>> unauthorized(AuthenticationException e) {
+        return ResponseEntity.status(401).body(Map.of("error", "Invalid email or password"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
