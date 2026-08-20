@@ -34,9 +34,6 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Install Playwright Chromium
-        run: mvn -B -pl ai-qa-api -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps chromium" exec:java
-
       - name: Verify application
         run: mvn -B verify
 
