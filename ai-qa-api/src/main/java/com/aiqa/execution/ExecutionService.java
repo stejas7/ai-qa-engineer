@@ -1,5 +1,6 @@
 package com.aiqa.execution;
 
+import com.aiqa.credential.RuntimeCredentialResolver.ResolvedCredential;
 import com.aiqa.healing.FailureCategory;
 import com.aiqa.healing.FailureClassifier;
 import com.aiqa.healing.HealingDecisionService;
@@ -13,7 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /** Deterministic browser execution engine used by AI UAT Engineer. */
 @Service
@@ -23,7 +26,6 @@ public class ExecutionService {
     private final HealingDecisionService healingDecisions;
     private final ExecutionEvidenceStore evidenceStore;
 
-    /** Compatibility constructor retained for unit tests that do not exercise evidence persistence. */
     public ExecutionService(ExecutionRecordRepository records,
                             FailureClassifier failureClassifier,
                             HealingDecisionService healingDecisions) {
@@ -42,6 +44,11 @@ public class ExecutionService {
     }
 
     public ExecutionResponse run(ExecutionRequest request) {
+        return run(request, null);
+    }
+
+    /** Executes with an optional in-memory M17 credential. Secret values are never persisted or logged. */
+    public ExecutionResponse run(ExecutionRequest request, ResolvedCredential credential) {
         long start = System.currentTimeMillis();
         Path evidenceDir = Path.of("evidence");
         String base = request.testId().replaceAll("[^A-Za-z0-9_-]", "_") + "-" + UUID.randomUUID();
@@ -52,15 +59,21 @@ public class ExecutionService {
             Files.createDirectories(evidenceDir);
             try (Playwright playwright = Playwright.create()) {
                 boolean headless = request.headless() == null || request.headless();
-                try (Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(headless));
-                     BrowserContext context = browser.newContext()) {
-                    page = context.newPage();
-                    navigate(page, request.url());
-                    for (String step : request.steps() == null ? List.<String>of() : request.steps()) {
-                        executeWithHealing(page, request.testId(), step, evidenceDir, beforeFile);
+                try (Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(headless))) {
+                    Browser.NewContextOptions contextOptions = new Browser.NewContextOptions();
+                    if (credential != null && credential.type() == com.aiqa.credential.CredentialProfile.CredentialType.API_TOKEN) {
+                        contextOptions.setExtraHTTPHeaders(Map.of("Authorization", "Bearer " + credential.secret()));
                     }
-                    if (request.expectedResult() != null && !request.expectedResult().isBlank()) verify(page, request.expectedResult());
-                    capture(page, evidenceDir.resolve(afterFile));
+                    try (BrowserContext context = browser.newContext(contextOptions)) {
+                        page = context.newPage();
+                        navigate(page, request.url());
+                        authenticateIfRequired(page, credential);
+                        for (String step : request.steps() == null ? List.<String>of() : request.steps()) {
+                            executeWithHealing(page, request.testId(), step, evidenceDir, beforeFile);
+                        }
+                        if (request.expectedResult() != null && !request.expectedResult().isBlank()) verify(page, request.expectedResult());
+                        capture(page, evidenceDir.resolve(afterFile));
+                    }
                 }
             }
             return persist(request, "PASS", start, evidenceIfPresent(evidenceDir, afterFile),
@@ -71,6 +84,28 @@ public class ExecutionService {
             } catch (Exception ignored) { }
             return persist(request, "FAIL", start, evidenceIfPresent(evidenceDir, afterFile), rootMessage(e));
         }
+    }
+
+    private void authenticateIfRequired(Page page, ResolvedCredential credential) {
+        if (credential == null || credential.type() == com.aiqa.credential.CredentialProfile.CredentialType.API_TOKEN) return;
+        if (credential.type() == com.aiqa.credential.CredentialProfile.CredentialType.OAUTH_CLIENT) {
+            throw new IllegalStateException("OAuth client browser login requires an explicit token flow configuration");
+        }
+
+        Locator principal = page.locator("input[type=email],input[name=username],input[autocomplete=username]").first();
+        Locator password = page.locator("input[type=password]").first();
+        if (principal.count() == 0 || password.count() == 0) {
+            throw new IllegalStateException("Configured login fields were not found on the product page");
+        }
+        principal.fill(credential.principal());
+        password.fill(credential.secret());
+
+        Locator submit = page.getByRole(AriaRole.BUTTON,
+                new Page.GetByRoleOptions().setName(Pattern.compile("(?i)sign in|log in|login|submit"))).first();
+        if (submit.count() == 0) submit = page.locator("button[type=submit],input[type=submit]").first();
+        if (submit.count() == 0) throw new IllegalStateException("Configured login submit control was not found");
+        submit.click();
+        page.waitForLoadState();
     }
 
     private void executeWithHealing(Page page, String testId, String step, Path evidenceDir, String beforeFile) {
