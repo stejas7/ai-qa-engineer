@@ -1,6 +1,10 @@
 name: AI UAT Bounded Load Test
 
 on:
+  workflow_run:
+    workflows: ["Deploy AI UAT Engineer to AWS EC2"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       requests:
@@ -17,14 +21,15 @@ permissions:
 
 jobs:
   load:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       BASE_URL: https://auravis-uat.duckdns.org
       LOAD_EMAIL: ${{ secrets.AI_UAT_LOAD_TEST_EMAIL }}
       LOAD_PASSWORD: ${{ secrets.AI_UAT_LOAD_TEST_PASSWORD }}
-      REQUESTS: ${{ inputs.requests }}
-      CONCURRENCY: ${{ inputs.concurrency }}
+      REQUESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.requests || '50' }}
+      CONCURRENCY: ${{ github.event_name == 'workflow_dispatch' && inputs.concurrency || '5' }}
     steps:
       - name: Validate safety limits
         run: |
@@ -64,6 +69,7 @@ PY
       - name: Run bounded authenticated API load
         run: |
           set -Eeuo pipefail
+          rm -f /tmp/status-codes
           start_ms=$(date +%s%3N)
           export BASE_URL
           seq "$REQUESTS" | xargs -P "$CONCURRENCY" -I{} bash -c '
@@ -87,10 +93,19 @@ PY
           echo "Failed: $failure"
           echo "Throughput: ${rate} req/s"
           if [ "$failure" -ne 0 ]; then
-            echo "Load test failed because one or more authenticated requests were unsuccessful"
+            echo "LOAD_GATE=FAILED"
             sort /tmp/status-codes | uniq -c
             exit 1
           fi
+          echo "LOAD_GATE=PASSED"
+
+      - name: Release load summary
+        if: ${{ always() }}
+        run: |
+          echo "## 4.0 Bounded Load Gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "Authenticated requests: $REQUESTS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Concurrency: $CONCURRENCY" >> "$GITHUB_STEP_SUMMARY"
+          echo "Target: authenticated /api/pipeline/stats" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Logout
         if: ${{ always() }}
