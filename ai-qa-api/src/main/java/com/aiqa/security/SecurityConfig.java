@@ -1,5 +1,6 @@
 package com.aiqa.security;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -9,9 +10,10 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 
-/** M14-M20 security foundation with tenant and platform-owner boundaries. */
+/** M14-M20 security foundation with tenant, platform-owner and optional OAuth2 SSO boundaries. */
 @Configuration
 public class SecurityConfig {
     @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
@@ -29,16 +31,27 @@ public class SecurityConfig {
     @Bean AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception { return configuration.getAuthenticationManager(); }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                            ObjectProvider<ClientRegistrationRepository> registrations,
+                                            ExistingUserOAuth2SuccessHandler ssoSuccessHandler) throws Exception {
         http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/sso/**").permitAll()
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/api/company/users/**").hasRole("COMPANY_ADMIN")
                         .requestMatchers("/api/company/products/**", "/api/company/credentials/**", "/api/company/uat/**").authenticated()
                         .anyRequest().permitAll())
-                .httpBasic(httpBasic -> httpBasic.disable()).formLogin(form -> form.disable());
+                .httpBasic(httpBasic -> httpBasic.disable())
+                .formLogin(form -> form.disable());
+
+        if (registrations.getIfAvailable() != null) {
+            http.oauth2Login(oauth -> oauth
+                    .authorizationEndpoint(endpoint -> endpoint.baseUri("/api/auth/sso/authorization"))
+                    .redirectionEndpoint(endpoint -> endpoint.baseUri("/api/auth/sso/callback/*"))
+                    .successHandler(ssoSuccessHandler)
+                    .failureUrl("/account?error=sso"));
+        }
         return http.build();
     }
 }
