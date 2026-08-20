@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/api/company/users/**").hasRole("COMPANY_ADMIN")
                         .requestMatchers("/api/company/products/**", "/api/company/credentials/**", "/api/company/uat/**").authenticated()
+                        .requestMatchers("/api/pipeline/**").authenticated()
                         .anyRequest().permitAll())
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(form -> form.disable());
