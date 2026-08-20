@@ -1,8 +1,10 @@
 package com.aiqa.execution;
 
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,21 +16,24 @@ import java.util.List;
 public class ExecutionController {
     private final ExecutionService service;
     private final ExecutionRecordRepository records;
+    private final ExecutionEvidenceStore evidenceStore;
 
     public ExecutionController(ExecutionService service, ExecutionRecordRepository records) {
+        this(service, records, null);
+    }
+
+    @Autowired
+    public ExecutionController(ExecutionService service, ExecutionRecordRepository records, ExecutionEvidenceStore evidenceStore) {
         this.service = service;
         this.records = records;
+        this.evidenceStore = evidenceStore;
     }
 
     @PostMapping("/run")
-    public ExecutionResponse run(@Valid @RequestBody ExecutionRequest request) {
-        return service.run(request);
-    }
+    public ExecutionResponse run(@Valid @RequestBody ExecutionRequest request) { return service.run(request); }
 
     @GetMapping("/history")
-    public List<ExecutionRecord> history() {
-        return records.findTop100ByOrderByExecutedAtDesc();
-    }
+    public List<ExecutionRecord> history() { return records.findTop100ByOrderByExecutedAtDesc(); }
 
     @GetMapping("/stats")
     public ExecutionStats stats() {
@@ -40,12 +45,21 @@ public class ExecutionController {
     }
 
     @GetMapping("/evidence/{file}")
-    public ResponseEntity<Resource> evidence(@PathVariable String file) throws Exception {
+    public ResponseEntity<?> evidence(@PathVariable String file) throws Exception {
+        if (evidenceStore != null) {
+            var stored = evidenceStore.find(file);
+            if (stored.isPresent()) {
+                ExecutionEvidence evidence = stored.get();
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(evidence.getMediaType()))
+                        .body(evidence.getContent());
+            }
+        }
         Path root = Path.of("evidence").toAbsolutePath().normalize();
         Path path = root.resolve(file).normalize();
         if (!path.startsWith(root)) return ResponseEntity.badRequest().build();
         Resource resource = new UrlResource(path.toUri());
-        return resource.exists() ? ResponseEntity.ok().body(resource) : ResponseEntity.notFound().build();
+        return resource.exists() ? ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(resource) : ResponseEntity.notFound().build();
     }
 
     public record ExecutionStats(long total, long passed, long failed, double passRate) {}
