@@ -3,6 +3,8 @@ package com.aiqa.platform;
 import com.aiqa.application.ApplicationTargetRepository;
 import com.aiqa.company.Company;
 import com.aiqa.company.CompanyRepository;
+import com.aiqa.performance.LoadTestRun;
+import com.aiqa.performance.LoadTestRunRepository;
 import com.aiqa.pipeline.PipelineRun;
 import com.aiqa.pipeline.PipelineRunRepository;
 import com.aiqa.security.AppUser;
@@ -24,15 +26,18 @@ public class PlatformOversightController {
     private final ApplicationTargetRepository products;
     private final AppUserRepository users;
     private final PipelineRunRepository runs;
+    private final LoadTestRunRepository loadTests;
 
     public PlatformOversightController(CompanyRepository companies,
                                        ApplicationTargetRepository products,
                                        AppUserRepository users,
-                                       PipelineRunRepository runs) {
+                                       PipelineRunRepository runs,
+                                       LoadTestRunRepository loadTests) {
         this.companies = companies;
         this.products = products;
         this.users = users;
         this.runs = runs;
+        this.loadTests = loadTests;
     }
 
     @GetMapping("/companies")
@@ -60,13 +65,11 @@ public class PlatformOversightController {
                 .toList();
     }
 
-    /** M20.4 cross-tenant UAT operations monitoring. Result payloads and secrets are intentionally excluded. */
     @GetMapping("/operations")
     public List<OperationView> operations() {
         return runs.findAllByOrderByCreatedAtDesc().stream().map(this::operationView).toList();
     }
 
-    /** M20.5 failure reporting. Raw result JSON is intentionally excluded; drill-down remains M20.8. */
     @GetMapping("/failures")
     public List<FailureView> failures() {
         return runs.findAllByOrderByCreatedAtDesc().stream()
@@ -74,6 +77,28 @@ public class PlatformOversightController {
                 .map(r -> new FailureView(r.getId(), r.getCompany(), r.getFileName(), r.getCurrentStage(),
                         r.getCreatedAt(), r.getCompletedAt(), safeFailure(r.getErrorMessage())))
                 .toList();
+    }
+
+    /** M20.6 read-only performance roll-up from persisted pipeline and load-test evidence. */
+    @GetMapping("/performance")
+    public PerformanceView performance() {
+        List<PipelineRun> pipelineRuns = runs.findAllByOrderByCreatedAtDesc();
+        List<Long> durations = pipelineRuns.stream()
+                .filter(r -> r.getCompletedAt() != null)
+                .map(r -> Duration.between(r.getCreatedAt(), r.getCompletedAt()).toMillis())
+                .toList();
+        long avgPipelineMs = durations.isEmpty() ? 0 : Math.round(durations.stream().mapToLong(Long::longValue).average().orElse(0));
+        long maxPipelineMs = durations.stream().mapToLong(Long::longValue).max().orElse(0);
+
+        List<LoadTestRun> recent = loadTests.findTop50ByOrderByCreatedAtDesc();
+        long totalLoadRuns = recent.size();
+        long sloPassed = recent.stream().filter(LoadTestRun::isSloPassed).count();
+        double avgP95Ms = recent.isEmpty() ? 0 : recent.stream().mapToLong(LoadTestRun::getP95Ms).average().orElse(0);
+        double avgThroughput = recent.isEmpty() ? 0 : recent.stream().mapToDouble(LoadTestRun::getThroughputPerSecond).average().orElse(0);
+        double avgErrorRate = recent.isEmpty() ? 0 : recent.stream().mapToDouble(LoadTestRun::getErrorRatePercent).average().orElse(0);
+
+        return new PerformanceView(pipelineRuns.size(), avgPipelineMs, maxPipelineMs, totalLoadRuns, sloPassed,
+                round(avgP95Ms), round(avgThroughput), round(avgErrorRate));
     }
 
     private OperationView operationView(PipelineRun run) {
@@ -89,6 +114,8 @@ public class PlatformOversightController {
         return safe.length() <= 500 ? safe : safe.substring(0, 500) + "…";
     }
 
+    private double round(double value) { return Math.round(value * 100.0) / 100.0; }
+
     public record CompanyView(UUID id, String name, String slug, boolean active, int products, int users) {}
     public record ProductView(UUID id, UUID companyId, String name, String environment, String authType, boolean active) {}
     public record UserView(UUID id, UUID companyId, String email, String role, boolean active) {}
@@ -96,4 +123,7 @@ public class PlatformOversightController {
                                 Object createdAt, Object completedAt, Long durationMillis, String failureSummary) {}
     public record FailureView(UUID id, String company, String fileName, String failedStage,
                               Object createdAt, Object failedAt, String diagnostic) {}
+    public record PerformanceView(long pipelineRuns, long averagePipelineDurationMs, long maxPipelineDurationMs,
+                                  long loadTestRuns, long loadTestSloPassed, double averageLoadP95Ms,
+                                  double averageThroughputPerSecond, double averageLoadErrorRatePercent) {}
 }
