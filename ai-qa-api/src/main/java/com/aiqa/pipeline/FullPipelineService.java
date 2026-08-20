@@ -5,6 +5,7 @@ import com.aiqa.agent.AgentRun;
 import com.aiqa.automation.AutomationRequest;
 import com.aiqa.automation.AutomationResponse;
 import com.aiqa.automation.PlaywrightAutomationService;
+import com.aiqa.credential.RuntimeCredentialResolver.ResolvedCredential;
 import com.aiqa.execution.ExecutionRequest;
 import com.aiqa.execution.ExecutionResponse;
 import com.aiqa.execution.ExecutionService;
@@ -34,7 +35,6 @@ import java.util.UUID;
 /** Runs the complete autonomous requirement-to-quality-gate pipeline. */
 @Service
 public class FullPipelineService {
-
     private static final Logger log = LoggerFactory.getLogger(FullPipelineService.class);
 
     private final RequirementSplitter splitter;
@@ -50,15 +50,15 @@ public class FullPipelineService {
     private final ObjectMapper mapper = new ObjectMapper();
 
     public FullPipelineService(RequirementSplitter splitter,
-                                RequirementRepository requirementRepository,
-                                AiRequirementService aiRequirementService,
-                                TestDesignService testDesignService,
-                                PlaywrightAutomationService automationService,
-                                ExecutionService executionService,
-                                FailureAnalysisService failureAnalysisService,
-                                QualityGateService qualityGateService,
-                                AgentOrchestrator agentOrchestrator,
-                                PipelineRunRepository pipelineRunRepository) {
+                               RequirementRepository requirementRepository,
+                               AiRequirementService aiRequirementService,
+                               TestDesignService testDesignService,
+                               PlaywrightAutomationService automationService,
+                               ExecutionService executionService,
+                               FailureAnalysisService failureAnalysisService,
+                               QualityGateService qualityGateService,
+                               AgentOrchestrator agentOrchestrator,
+                               PipelineRunRepository pipelineRunRepository) {
         this.splitter = splitter;
         this.requirementRepository = requirementRepository;
         this.aiRequirementService = aiRequirementService;
@@ -73,7 +73,19 @@ public class FullPipelineService {
 
     @Async
     public void runInBackground(UUID pipelineRunId, String rawText, String fallbackTitle,
-                                 String targetUrl, boolean executeAutomation) {
+                                String targetUrl, boolean executeAutomation) {
+        execute(pipelineRunId, rawText, fallbackTitle, targetUrl, executeAutomation, null);
+    }
+
+    /** Tenant-safe M19 overload carrying an in-memory credential that is never persisted in pipeline result JSON. */
+    @Async
+    public void runInBackground(UUID pipelineRunId, String rawText, String fallbackTitle,
+                                String targetUrl, boolean executeAutomation, ResolvedCredential runtimeCredential) {
+        execute(pipelineRunId, rawText, fallbackTitle, targetUrl, executeAutomation, runtimeCredential);
+    }
+
+    private void execute(UUID pipelineRunId, String rawText, String fallbackTitle,
+                         String targetUrl, boolean executeAutomation, ResolvedCredential runtimeCredential) {
         PipelineRun pipelineRun = pipelineRunRepository.findById(pipelineRunId)
                 .orElseThrow(() -> new IllegalArgumentException("Pipeline run not found"));
 
@@ -83,9 +95,7 @@ public class FullPipelineService {
             pipelineRunRepository.save(pipelineRun);
 
             List<RequirementSplitter.RequirementBlock> blocks = splitter.split(rawText, fallbackTitle);
-            if (blocks.isEmpty()) {
-                throw new IllegalArgumentException("No requirement content found in the uploaded file");
-            }
+            if (blocks.isEmpty()) throw new IllegalArgumentException("No requirement content found in the uploaded file");
 
             List<PipelineModels.RequirementResult> requirementResults = new ArrayList<>();
             int totalTests = 0, passedTests = 0, failedTests = 0, automatedTests = 0;
@@ -137,7 +147,7 @@ public class FullPipelineService {
                             pipelineRunRepository.save(pipelineRun);
                             var executionStep = agentOrchestrator.addStep(agentRun.getId(), "UAT_EXECUTION", testCase.id());
                             execution = executionService.run(new ExecutionRequest(
-                                    testCase.id(), targetUrl, testCase.steps(), testCase.expectedResult(), true));
+                                    testCase.id(), targetUrl, testCase.steps(), testCase.expectedResult(), true), runtimeCredential);
                             agentOrchestrator.completeStep(executionStep.getId(), execution.status() + " - " + execution.message());
 
                             if ("PASS".equalsIgnoreCase(execution.status())) {
@@ -184,9 +194,7 @@ public class FullPipelineService {
             try {
                 agentRun.fail(e.getMessage());
                 agentOrchestrator.complete(agentRun.getId(), "Pipeline failed: " + e.getMessage());
-            } catch (Exception ignored) {
-                // best-effort bookkeeping
-            }
+            } catch (Exception ignored) { }
             pipelineRun.fail(e.getMessage() == null ? e.toString() : e.getMessage());
             pipelineRunRepository.save(pipelineRun);
         }
