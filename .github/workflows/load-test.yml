@@ -1,0 +1,99 @@
+name: AI UAT Bounded Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      requests:
+        description: Total authenticated requests (max 200)
+        required: true
+        default: '50'
+      concurrency:
+        description: Parallel workers (max 10)
+        required: true
+        default: '5'
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: https://auravis-uat.duckdns.org
+      LOAD_EMAIL: ${{ secrets.AI_UAT_LOAD_TEST_EMAIL }}
+      LOAD_PASSWORD: ${{ secrets.AI_UAT_LOAD_TEST_PASSWORD }}
+      REQUESTS: ${{ inputs.requests }}
+      CONCURRENCY: ${{ inputs.concurrency }}
+    steps:
+      - name: Validate safety limits
+        run: |
+          set -Eeuo pipefail
+          [[ "$REQUESTS" =~ ^[0-9]+$ ]] && [[ "$CONCURRENCY" =~ ^[0-9]+$ ]]
+          if [ "$REQUESTS" -lt 1 ] || [ "$REQUESTS" -gt 200 ]; then
+            echo "requests must be between 1 and 200"
+            exit 1
+          fi
+          if [ "$CONCURRENCY" -lt 1 ] || [ "$CONCURRENCY" -gt 10 ]; then
+            echo "concurrency must be between 1 and 10"
+            exit 1
+          fi
+          if [ -z "${LOAD_EMAIL:-}" ] || [ -z "${LOAD_PASSWORD:-}" ]; then
+            echo "Dedicated load-test credentials are required"
+            exit 1
+          fi
+
+      - name: Authenticate dedicated load user
+        run: |
+          set -Eeuo pipefail
+          payload="$(python3 - <<'PY'
+import json, os
+print(json.dumps({'email': os.environ['LOAD_EMAIL'], 'password': os.environ['LOAD_PASSWORD']}))
+PY
+)"
+          curl -fsS --connect-timeout 5 --max-time 15 \
+            -c /tmp/ai-uat-load.cookies \
+            -H 'Content-Type: application/json' \
+            -d "$payload" \
+            "$BASE_URL/api/auth/login" >/tmp/login.json
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            -b /tmp/ai-uat-load.cookies \
+            "$BASE_URL/api/auth/me" >/tmp/me.json
+          echo "Authenticated dedicated load-test user"
+
+      - name: Run bounded authenticated API load
+        run: |
+          set -Eeuo pipefail
+          start_ms=$(date +%s%3N)
+          export BASE_URL
+          seq "$REQUESTS" | xargs -P "$CONCURRENCY" -I{} bash -c '
+            code=$(curl -sS --connect-timeout 3 --max-time 10 -o /dev/null -w "%{http_code}" -b /tmp/ai-uat-load.cookies "$BASE_URL/api/pipeline/stats" || echo 000)
+            echo "$code" >> /tmp/status-codes
+          '
+          end_ms=$(date +%s%3N)
+          elapsed=$((end_ms-start_ms))
+          success=$(grep -c '^200$' /tmp/status-codes || true)
+          failure=$((REQUESTS-success))
+          rate=$(python3 - <<PY
+req=$REQUESTS
+ms=max($elapsed,1)
+print(round(req/(ms/1000),2))
+PY
+)
+          echo "Requests: $REQUESTS"
+          echo "Concurrency: $CONCURRENCY"
+          echo "Duration: ${elapsed}ms"
+          echo "Successful: $success"
+          echo "Failed: $failure"
+          echo "Throughput: ${rate} req/s"
+          if [ "$failure" -ne 0 ]; then
+            echo "Load test failed because one or more authenticated requests were unsuccessful"
+            sort /tmp/status-codes | uniq -c
+            exit 1
+          fi
+
+      - name: Logout
+        if: ${{ always() }}
+        run: |
+          curl -sS --connect-timeout 3 --max-time 10 -b /tmp/ai-uat-load.cookies -X POST "$BASE_URL/api/auth/logout" >/dev/null || true
+          rm -f /tmp/ai-uat-load.cookies /tmp/login.json /tmp/me.json /tmp/status-codes
