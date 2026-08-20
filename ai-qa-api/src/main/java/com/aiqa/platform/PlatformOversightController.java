@@ -10,7 +10,9 @@ import com.aiqa.pipeline.PipelineRun;
 import com.aiqa.pipeline.PipelineRunRepository;
 import com.aiqa.security.AppUser;
 import com.aiqa.security.AppUserRepository;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,12 +21,18 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** M20 read-only platform-owner oversight. Never exposes password hashes or credential secrets. */
 @RestController
 @RequestMapping("/api/platform")
 public class PlatformOversightController {
+    private static final Pattern RELEASE_DECISION_PATTERN = Pattern.compile(
+            "(?i)\\\"(?:releaseDecision|releaseRecommendation|qualityGate|decision)\\\"\\s*:\\s*\\\"(READY|BLOCKED|PASS|FAIL)\\\"");
+
     private final CompanyRepository companies;
     private final ApplicationTargetRepository products;
     private final AppUserRepository users;
@@ -71,6 +79,14 @@ public class PlatformOversightController {
     @GetMapping("/operations")
     public List<OperationView> operations() {
         return runs.findAllByOrderByCreatedAtDesc().stream().map(this::operationView).toList();
+    }
+
+    /** M20.8 sanitized read-only drill-down. Raw result JSON and evidence paths are never returned. */
+    @GetMapping("/operations/{id}")
+    public ResponseEntity<OperationDetailView> operation(@PathVariable UUID id) {
+        return runs.findById(id)
+                .map(run -> ResponseEntity.ok(operationDetailView(run)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/failures")
@@ -140,14 +156,34 @@ public class PlatformOversightController {
     }
 
     private OperationView operationView(PipelineRun run) {
-        Long durationMillis = run.getCompletedAt() == null ? null : Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis();
+        Long durationMillis = duration(run);
         return new OperationView(run.getId(), run.getCompany(), run.getFileName(), run.getStatus(),
                 run.getCurrentStage(), run.getCreatedAt(), run.getCompletedAt(), durationMillis,
                 run.getErrorMessage() == null || run.getErrorMessage().isBlank() ? null : "Failure recorded");
     }
 
+    private OperationDetailView operationDetailView(PipelineRun run) {
+        String result = run.getResultJson();
+        String normalized = result == null ? "" : result.toLowerCase(Locale.ROOT);
+        boolean resultAvailable = !normalized.isBlank();
+        boolean evidenceAvailable = normalized.contains("\"evidence\"") || normalized.contains("\"screenshot\"");
+        return new OperationDetailView(run.getId(), run.getCompany(), run.getFileName(), run.getStatus(),
+                run.getCurrentStage(), run.getCreatedAt(), run.getCompletedAt(), duration(run),
+                safeFailure(run.getErrorMessage()), resultAvailable, evidenceAvailable, releaseDecision(result));
+    }
+
+    private Long duration(PipelineRun run) {
+        return run.getCompletedAt() == null ? null : Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis();
+    }
+
+    private String releaseDecision(String resultJson) {
+        if (resultJson == null || resultJson.isBlank()) return null;
+        Matcher matcher = RELEASE_DECISION_PATTERN.matcher(resultJson);
+        return matcher.find() ? matcher.group(1).toUpperCase(Locale.ROOT) : null;
+    }
+
     private String safeFailure(String message) {
-        if (message == null || message.isBlank()) return "Execution failed without a recorded diagnostic.";
+        if (message == null || message.isBlank()) return null;
         String safe = message.replaceAll("(?i)(password|token|secret|api[-_ ]?key|authorization)\\s*[:=]\\s*[^\\s,;]+", "$1=[REDACTED]");
         return safe.length() <= 500 ? safe : safe.substring(0, 500) + "…";
     }
@@ -160,6 +196,9 @@ public class PlatformOversightController {
     public record UserView(UUID id, UUID companyId, String email, String role, boolean active) {}
     public record OperationView(UUID id, String company, String fileName, String status, String currentStage,
                                 Object createdAt, Object completedAt, Long durationMillis, String failureSummary) {}
+    public record OperationDetailView(UUID id, String company, String fileName, String status, String currentStage,
+                                      Object createdAt, Object completedAt, Long durationMillis, String diagnostic,
+                                      boolean resultAvailable, boolean evidenceAvailable, String releaseDecision) {}
     public record FailureView(UUID id, String company, String fileName, String failedStage,
                               Object createdAt, Object failedAt, String diagnostic) {}
     public record PerformanceView(long pipelineRuns, long averagePipelineDurationMs, long maxPipelineDurationMs,
