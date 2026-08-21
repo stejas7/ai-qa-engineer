@@ -1,12 +1,67 @@
 # AI UAT Engineer — Autonomous UAT Learning Project
 
-> **From business requirement to release confidence — with AI-assisted UAT automation.**
+> **From business requirement to release confidence — powered by a virtual workforce of 100 specialized AI agents.**
 
 This repository contains the **Java / Spring Boot backend** for **AI UAT Engineer**. The React UI lives in the separate repository `stejas7/ai-qa-frontend`.
 
 AI UAT Engineer is a learning and AI-engineering portfolio project exploring how Java, Spring AI, RAG, agentic orchestration, deterministic browser automation, security, evidence, CI/CD and cloud deployment can work together around one end-to-end UAT problem.
 
-> **Learning-project note:** this product is still evolving. There are many experiments, open questions and limitations, and it may not yet be suitable for direct use against real products. The goal is to keep learning, hardening the architecture and validating how far this approach can go.
+> **Learning-project note:** this product is still evolving. The 100-agent workforce is an architectural capability catalog: agents are not all executed at once. The orchestrator activates only the smallest useful tenant-safe subset for each mission.
+
+## 100-Agent AI Workforce
+
+The platform now exposes a canonical catalog of **100 specialized AI UAT workers** covering orchestration, requirements, test design, automation, execution, diagnostics, quality, knowledge/RAG, integrations, governance and platform intelligence.
+
+```text
+Requirement
+   ↓
+Chief UAT Orchestrator
+   ↓
+Dynamic mission-team selection
+   ↓
+Relevant specialists only (typically a bounded subset)
+   ↓
+Analysis → Test Design → Automation → Execution
+   ↓
+Diagnostics / Healing → Evidence → Quality / Governance
+   ↓
+Human-controlled Release Decision
+```
+
+Key rule: **100 agents available does not mean 100 agents run concurrently.** Mission composition is capability-driven and bounded; the backend currently caps an individual selected mission team at 20 agents.
+
+Workforce endpoint groups:
+
+```text
+GET /api/agent-workforce/catalog
+GET /api/agent-workforce/plan
+POST /api/intelligence/risk-score
+```
+
+### Workforce organization
+
+| Agent range | Team |
+|---|---|
+| 1–5 | Orchestration |
+| 6–10 | Requirements |
+| 11–15 | Test Design |
+| 16–20 | Automation |
+| 21–25 | Execution |
+| 26–30 | Diagnostics / Healing |
+| 31–35 | Quality / Performance / Security |
+| 36–40 | Knowledge / RAG / Traceability |
+| 41–45 | Integrations |
+| 46–50 | Governance / Release / Self-UAT |
+| 51–55 | Advanced Requirements Intelligence |
+| 56–60 | Advanced Test Design |
+| 61–65 | Advanced Automation |
+| 66–70 | Advanced Execution |
+| 71–75 | Advanced Diagnostics |
+| 76–80 | Advanced Quality Intelligence |
+| 81–85 | Advanced Knowledge / Learning |
+| 86–90 | Advanced Integrations |
+| 91–95 | Advanced Governance / Security |
+| 96–100 | Platform Intelligence / Workforce Direction |
 
 ## Product Flow
 
@@ -23,6 +78,10 @@ Upload Requirement
       ↓
 Requirement Analysis + RAG Context
       ↓
+Risk / Change / Regression Intelligence
+      ↓
+Dynamic AI Workforce Selection
+      ↓
 Test Design
       ↓
 Automation Generation
@@ -31,7 +90,9 @@ Playwright Execution
       ↓
 Durable Evidence + Traceability
       ↓
-READY / BLOCKED Release Recommendation
+Release Governance
+      ↓
+READY / BLOCKED / Human Approval
 ```
 
 ## Architecture
@@ -48,18 +109,19 @@ Nginx on AWS EC2
 Spring Boot 3.5
       |
       +--> Spring Security / tenant authorization
+      +--> 100-Agent Workforce Catalog / mission planner
       +--> Spring AI / OpenAI
       +--> RAG / knowledge retrieval
-      +--> Agent orchestration
       +--> Deterministic Java policy
       +--> Playwright execution
       +--> PostgreSQL persistence
       +--> Evidence / traceability / reporting
+      +--> Release governance / platform diagnostics
 ```
 
 ## Engineering Principle
 
-> **AI reasons. Java controls state and policy. Playwright executes. Evidence supports the release decision.**
+> **AI reasons. Java controls state and policy. Playwright executes. Evidence supports the release decision. Humans retain release authority.**
 
 ## Current Technology Stack
 
@@ -71,134 +133,46 @@ Frontend: React • TypeScript • Vite • React Router • TanStack Query.
 
 | Milestone | Capability | Status |
 |---|---|---|
-| M1–M7 | Core autonomous UAT foundation | ✅ Complete |
-| M8 | Reliable Autonomous UAT Operations | ✅ Implemented / hardening continues |
-| M9 | RAG / AI orchestration evolution | ✅ Complete |
-| M10 | Autonomous workflow improvements | ✅ Complete |
-| M11 | Performance & load-testing foundation | ✅ Complete |
-| M12 | Automation-script management | ✅ Complete |
-| M13 | Test management & traceability | ✅ Complete |
-| M14–M16 | Company, product, users & security foundation | ✅ Complete |
-| M17 | Secure credential profiles | ✅ Core complete |
-| M18 | Tenant authorization & product scope | ✅ Core complete |
-| M19 | One-click authenticated autonomous UAT | 🔨 Stabilization / E2E validation |
-| M20.1–M20.3 | Platform Owner + company/product/user reporting | ✅ Complete |
-| M20.4–M20.8 | Platform operations monitoring & audit/report drill-down | ⏳ Planned after M19 is green |
-
-## v3.2.0 Stabilization Gates
-
-```text
-Deployment GREEN
-      ↓
-M19 E2E GREEN
-      ↓
-Platform Admin Login GREEN
-      ↓
-Google / GitHub SSO GREEN
-      ↓
-M20.4–M20.8
-      ↓
-Self-UAT + Load + Security Testing
-      ↓
-4.0 Stable
-```
-
-No unrelated feature expansion should jump ahead of a failed stabilization gate.
+| M1–M20 | Core UAT, RAG, automation, execution, multi-tenant foundation | ✅ Implemented / stabilized progressively |
+| M21 | Super Admin, Company Admin evolution, external API/OAuth foundation, password recovery | ✅ Implemented |
+| M22–M24 | Authorization hardening, security audit, tenant governance | ✅ Implemented |
+| M25–M27 | Integrations, webhook delivery, operational readiness | ✅ Implemented |
+| M28–M30 | Release approval, platform analytics, enterprise readiness | ✅ Implemented |
+| M31–M34 | 100-agent workforce foundation, risk/change/flaky/regression intelligence | ✅ Foundation merged |
+| M35–M38 | Enterprise integrations expansion | 🔨 Next workforce phase |
+| M39–M42 | Governance & compliance expansion | 🔨 Planned / branch prepared |
+| M43–M46 | Scale, queue, recovery, observability | ⏳ Planned |
+| M47–M50 | Multi-agent release planning, prediction, learning, self-UAT | ⏳ Planned |
 
 ## Authentication & Tenant Model
 
-- the first registered company user becomes `COMPANY_ADMIN`
-- `COMPANY_ADMIN` can manage users and product environments
-- `QA_MANAGER` can manage/run UAT within the company
-- `TESTER` can execute authorized UAT
-- `VIEWER` has results/evidence access only
-- `PLATFORM_ADMIN` is reserved for read-only cross-company platform oversight
+- first registered company user becomes `COMPANY_ADMIN`
+- multiple Company Admins are supported with last-active-admin safeguards
+- `QA_MANAGER`, `TESTER` and `VIEWER` retain bounded tenant roles
+- `SUPER_ADMIN` is supported with legacy `PLATFORM_ADMIN` compatibility
 - tenant identity and registered target URL are resolved server-side
 - cross-company UAT execution is denied
+- workforce selection must remain tenant-safe
 - runtime credentials are referenced and resolved only at execution time
-- raw credential values are not persisted in result JSON or exposed through reporting APIs
-
-## Authenticated M19 Flow
-
-```text
-Authenticated User
-      ↓
-Authorized Company
-      ↓
-Registered Product Target
-      ↓
-Runtime Credential Readiness
-      ↓
-Credential Resolution (in memory only)
-      ↓
-Requirement → Tests → Automation
-      ↓
-Playwright Login / Execution
-      ↓
-Evidence
-      ↓
-Quality Gate
-      ↓
-READY / BLOCKED
-```
-
-`USERNAME_PASSWORD` and `API_TOKEN` runtime paths are supported. `OAUTH_CLIENT` intentionally fails closed until an explicit token flow is configured.
-
-## Spring AI Runtime
-
-Spring AI 1.1.8 is used as the Java-native model integration layer. Runtime configuration:
-
-```text
-OPENAI_API_KEY=<secret>
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-When a real model credential is unavailable or a provider call fails, deterministic Java fallback keeps supported flows operational. Deployment verifies both `/actuator/health` and `/api/ai/runtime` before success.
-
-Safe runtime metadata:
-
-```text
-GET /api/ai/runtime
-```
-
-The endpoint exposes framework/model configuration metadata but never exposes the API key.
+- raw credential values, API secrets and password reset tokens are never returned in reporting payloads
 
 ## Core Capabilities
 
-### Requirement intelligence
-- TXT, Markdown, DOCX and PDF input
-- business intent and acceptance-criteria analysis
-- AI-assisted scenario generation with deterministic fallback
-
-### Knowledge / RAG
-- persisted project knowledge
-- PostgreSQL-backed retrieval
-- product-context grounding
-
-### Test design & automation
-- functional, negative, boundary and risk scenarios
-- automation candidate generation
-- deterministic Playwright execution
-- registered product/environment targets
-
-### Evidence & quality decisions
-- persisted execution history
-- durable evidence support
-- failure diagnosis and bounded healing
-- release-quality gate with READY / BLOCKED outcome
-
-### Multi-tenant product foundation
-- company registration
-- company users and roles
-- registered product environments
-- secure runtime credential references
-- tenant-scoped UAT launch
-
-### Platform Owner reporting
-- read-only company directory
-- product/environment overview
-- user/role overview
-- platform-level reporting without password hashes, target secrets or credential values
+- Requirement intelligence and change-impact analysis
+- Risk-based prioritization and smart regression selection
+- RAG-grounded product knowledge
+- 100-agent virtual UAT workforce catalog
+- Dynamic bounded mission-team selection
+- Functional/negative/boundary/data test design
+- UI/API automation generation and Playwright execution
+- Failure classification, flaky-test intelligence and bounded healing
+- Evidence, traceability and release-quality decisions
+- Multi-tenant company/product/user/security model
+- Forgot-password single-use reset-token flow
+- Super Admin diagnostics and platform analytics
+- Tenant governance limits and durable metadata-only security audit
+- Tenant HTTPS integrations and webhook delivery history
+- Release approval workflow and enterprise-readiness gates
 
 ## Selected API Endpoints
 
@@ -207,78 +181,28 @@ The endpoint exposes framework/model configuration metadata but never exposes th
 | POST | `/api/auth/register` | Register company and first Company Admin |
 | POST | `/api/auth/login` | Sign in |
 | GET | `/api/auth/me` | Current authenticated user |
+| POST | `/api/auth/password/forgot` | Request password reset |
+| POST | `/api/auth/password/reset` | Complete password reset |
 | GET | `/api/company/products` | Tenant product environments |
-| POST | `/api/company/uat/upload` | Tenant-safe M19 UAT launch |
+| POST | `/api/company/uat/upload` | Tenant-safe UAT launch |
 | GET | `/api/pipeline/runs` | Persisted UAT runs |
-| GET | `/api/pipeline/runs/{id}` | Structured run result |
 | GET | `/api/execution/evidence/{file}` | Execution evidence |
-| GET | `/api/ai/runtime` | Spring AI runtime metadata |
-| GET | `/api/platform/companies` | Platform Owner company reporting |
-| GET | `/api/platform/products` | Platform Owner product reporting |
-| GET | `/api/platform/users` | Platform Owner user reporting |
+| GET | `/api/agent-workforce/catalog` | 100-agent workforce catalog |
+| GET | `/api/agent-workforce/plan` | Select bounded mission workforce |
+| POST | `/api/intelligence/risk-score` | Deterministic risk scoring |
+| GET | `/api/platform/diagnostics` | Platform health/usage snapshot |
+| GET | `/api/platform/enterprise-readiness` | Enterprise readiness gate |
 | GET | `/actuator/health` | Application health |
-
-Additional capability groups exist under `/api/knowledge/*`, `/api/rag/*`, `/api/performance/*`, `/api/automation-scripts/*` and `/api/test-management/*`.
-
-## Testing
-
-Maven verification includes JUnit coverage for tenant authorization, credential readiness, pipeline behavior, quality gates, agent policy, healing policy and other backend logic.
-
-M19 stabilization is adding controlled browser-level Playwright coverage for:
-
-```text
-runtime credential
-  → login page
-  → authenticated content
-  → execution evidence
-  → persisted pipeline result
-  → READY / BLOCKED release gate
-```
-
-The CI runner installs Chromium specifically for controlled browser E2E verification.
-
-## Demo UAT Fixture
-
-`ai-qa-api/src/main/resources/static/uat/index.html` is retained as a deterministic browser/UAT fixture. It is a test target, not the AI UAT Engineer product UI.
-
-## Run Backend Locally
-
-```bash
-git clone https://github.com/stejas7/ai-qa-engineer.git
-cd ai-qa-engineer
-docker compose up -d postgres
-mvn clean verify
-mvn spring-boot:run -pl ai-qa-api
-```
-
-To enable a real AI model locally:
-
-```bash
-export OPENAI_API_KEY=<your-key>
-export OPENAI_MODEL=gpt-4.1-mini
-```
-
-## Platform Admin Bootstrap
-
-The first Platform Owner account is provisioned from runtime environment variables; values are never committed to Git:
-
-```text
-AI_UAT_PLATFORM_ADMIN_EMAIL
-AI_UAT_PLATFORM_ADMIN_PASSWORD
-```
 
 ## Deployment
 
 ```text
 Commit to main
-  → Maven verify
-  → immutable Docker image
-  → GHCR
+  → backend/frontend validation
+  → immutable deployment artifacts
   → AWS EC2
-  → local health
-  → Spring AI runtime check
-  → public health / contract checks
+  → health + login + contract checks
   → deployment success
 ```
 
-The public base URL is deployment configuration and is intentionally not part of the product brand.
+Feature work can move rapidly, but production deployment remains controlled from `main`. The public base URL is deployment configuration and is intentionally not part of the product brand.
