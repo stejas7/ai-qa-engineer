@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Company-admin API for M15 tenant-scoped user administration. */
+/** Company-admin API for tenant-scoped user administration. */
 @RestController
 @RequestMapping("/api/company/users")
 public class CompanyUserController {
@@ -36,9 +36,21 @@ public class CompanyUserController {
         return service.createUser(authentication.getName(), request);
     }
 
+    @PatchMapping("/{id}/role")
+    public CompanyUserService.UserSummary changeRole(Authentication authentication,
+                                                      @PathVariable UUID id,
+                                                      @RequestBody CompanyUserService.ChangeRoleRequest request) {
+        return service.changeRole(authentication.getName(), id, request.role());
+    }
+
     @PatchMapping("/{id}/deactivate")
     public CompanyUserService.UserSummary deactivate(Authentication authentication, @PathVariable UUID id) {
         return service.deactivateUser(authentication.getName(), id);
+    }
+
+    @PatchMapping("/{id}/activate")
+    public CompanyUserService.UserSummary activate(Authentication authentication, @PathVariable UUID id) {
+        return service.activateUser(authentication.getName(), id);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
