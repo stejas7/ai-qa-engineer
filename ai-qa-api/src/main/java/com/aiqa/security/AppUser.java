@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Persisted M14 application identity bound to a company tenant. */
+/** Persisted application identity bound to a company tenant. */
 @Entity
 @Table(name = "ai_uat_users")
 public class AppUser {
@@ -56,8 +56,14 @@ public class AppUser {
     public boolean isActive() { return active; }
     public Instant getCreatedAt() { return createdAt; }
     public void deactivate() { this.active = false; }
+    public void activate() { this.active = true; }
 
-    /** Restricted lifecycle hook used only to synchronize the configured platform-admin secret. */
+    public void changeRole(UserRole role) {
+        if (role == null) throw new IllegalArgumentException("role is required");
+        this.role = role;
+    }
+
+    /** Restricted lifecycle hook used only to synchronize configured platform-admin secrets. */
     void replacePasswordHash(String passwordHash) {
         if (passwordHash == null || passwordHash.isBlank()) {
             throw new IllegalArgumentException("passwordHash is required");
