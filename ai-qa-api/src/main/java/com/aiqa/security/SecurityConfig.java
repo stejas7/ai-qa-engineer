@@ -13,7 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 
-/** M14-M20 security foundation with tenant, platform-owner and optional OAuth2 SSO boundaries. */
+/** Security foundation with tenant, platform-owner and optional OAuth2 SSO boundaries. */
 @Configuration
 public class SecurityConfig {
     @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
@@ -39,7 +39,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/sso/**").permitAll()
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
-                        .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers("/api/platform/**").hasAnyRole("SUPER_ADMIN", "PLATFORM_ADMIN")
                         .requestMatchers("/api/company/users/**").hasRole("COMPANY_ADMIN")
                         .requestMatchers("/api/company/products/**", "/api/company/credentials/**", "/api/company/uat/**").authenticated()
                         .requestMatchers("/api/pipeline/**").authenticated()
