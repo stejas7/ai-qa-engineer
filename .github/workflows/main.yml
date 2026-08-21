@@ -239,3 +239,5 @@ PY
       - name: Cleanup runner secrets
         if: always()
         run: rm -f "$RUNNER_TEMP/ec2_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json
+
+# Redeploy trigger: ai-uat.duckdns.org migration
