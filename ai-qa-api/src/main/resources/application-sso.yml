@@ -10,9 +10,9 @@ spring:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
             scope: openid,profile,email
-            redirect-uri: "https://auravis-uat.duckdns.org/api/auth/sso/callback/google"
+            redirect-uri: "https://ai-uat.duckdns.org/api/auth/sso/callback/google"
           github:
             client-id: ${GITHUB_CLIENT_ID}
             client-secret: ${GITHUB_CLIENT_SECRET}
             scope: read:user,user:email
-            redirect-uri: "https://auravis-uat.duckdns.org/api/auth/sso/callback/github"
+            redirect-uri: "https://ai-uat.duckdns.org/api/auth/sso/callback/github"
