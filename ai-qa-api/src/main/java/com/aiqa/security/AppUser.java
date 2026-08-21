@@ -56,4 +56,12 @@ public class AppUser {
     public boolean isActive() { return active; }
     public Instant getCreatedAt() { return createdAt; }
     public void deactivate() { this.active = false; }
+
+    /** Restricted lifecycle hook used only to synchronize the configured platform-admin secret. */
+    void replacePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("passwordHash is required");
+        }
+        this.passwordHash = passwordHash;
+    }
 }
