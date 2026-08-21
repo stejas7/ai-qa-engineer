@@ -1,10 +1,6 @@
 name: AI UAT Bounded Load Test
 
 on:
-  workflow_run:
-    workflows: ["Deploy AI UAT Engineer to AWS EC2"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       requests:
@@ -21,15 +17,14 @@ permissions:
 
 jobs:
   load:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       BASE_URL: https://auravis-uat.duckdns.org
       LOAD_EMAIL: ${{ secrets.AI_UAT_LOAD_TEST_EMAIL }}
       LOAD_PASSWORD: ${{ secrets.AI_UAT_LOAD_TEST_PASSWORD }}
-      REQUESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.requests || '50' }}
-      CONCURRENCY: ${{ github.event_name == 'workflow_dispatch' && inputs.concurrency || '5' }}
+      REQUESTS: ${{ inputs.requests }}
+      CONCURRENCY: ${{ inputs.concurrency }}
     steps:
       - name: Validate safety limits
         run: |
@@ -56,14 +51,8 @@ import json, os
 print(json.dumps({'email': os.environ['LOAD_EMAIL'], 'password': os.environ['LOAD_PASSWORD']}))
 PY
 )"
-          curl -fsS --connect-timeout 5 --max-time 15 \
-            -c /tmp/ai-uat-load.cookies \
-            -H 'Content-Type: application/json' \
-            -d "$payload" \
-            "$BASE_URL/api/auth/login" >/tmp/login.json
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            -b /tmp/ai-uat-load.cookies \
-            "$BASE_URL/api/auth/me" >/tmp/me.json
+          curl -fsS --connect-timeout 5 --max-time 15 -c /tmp/ai-uat-load.cookies -H 'Content-Type: application/json' -d "$payload" "$BASE_URL/api/auth/login" >/tmp/login.json
+          curl -fsS --connect-timeout 5 --max-time 10 -b /tmp/ai-uat-load.cookies "$BASE_URL/api/auth/me" >/tmp/me.json
           echo "Authenticated dedicated load-test user"
 
       - name: Run bounded authenticated API load
