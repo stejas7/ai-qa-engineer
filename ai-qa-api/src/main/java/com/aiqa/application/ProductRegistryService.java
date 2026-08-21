@@ -1,5 +1,6 @@
 package com.aiqa.application;
 
+import com.aiqa.governance.TenantGovernanceService;
 import com.aiqa.security.AppUser;
 import com.aiqa.security.AppUserRepository;
 import com.aiqa.security.UserRole;
@@ -10,15 +11,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/** M16 tenant-scoped product/environment registry. Company identity is derived from the authenticated user. */
+/** Tenant-scoped product/environment registry with governance enforcement. */
 @Service
 public class ProductRegistryService {
     private final ApplicationTargetRepository targets;
     private final AppUserRepository users;
+    private final TenantGovernanceService governance;
 
-    public ProductRegistryService(ApplicationTargetRepository targets, AppUserRepository users) {
+    public ProductRegistryService(ApplicationTargetRepository targets,
+                                  AppUserRepository users,
+                                  TenantGovernanceService governance) {
         this.targets = targets;
         this.users = users;
+        this.governance = governance;
     }
 
     public List<ApplicationTarget> list(String actorEmail, boolean activeOnly) {
@@ -39,6 +44,7 @@ public class ProductRegistryService {
         if (targets.existsByCompanyIdAndNameIgnoreCaseAndEnvironmentIgnoreCase(actor.getCompanyId(), name, environment)) {
             throw new IllegalStateException("Product environment is already registered for this company");
         }
+        governance.assertCanAddProduct(actor.getCompanyId());
         return targets.save(new ApplicationTarget(name, baseUrl, environment, authType, actor.getCompanyId()));
     }
 

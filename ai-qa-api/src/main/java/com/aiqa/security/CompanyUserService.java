@@ -1,5 +1,6 @@
 package com.aiqa.security;
 
+import com.aiqa.governance.TenantGovernanceService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -7,15 +8,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/** M15/M21 tenant-safe company user administration with multi-admin safeguards. */
+/** Tenant-safe company user administration with multi-admin and governance safeguards. */
 @Service
 public class CompanyUserService {
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final TenantGovernanceService governance;
 
-    public CompanyUserService(AppUserRepository users, PasswordEncoder passwordEncoder) {
+    public CompanyUserService(AppUserRepository users,
+                              PasswordEncoder passwordEncoder,
+                              TenantGovernanceService governance) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
+        this.governance = governance;
     }
 
     public List<UserSummary> listUsers(String actorEmail) {
@@ -32,6 +37,7 @@ public class CompanyUserService {
         validatePassword(request.password());
         UserRole role = validateManagedRole(request.role());
         if (users.existsByEmailIgnoreCase(email)) throw new IllegalStateException("User email is already registered");
+        governance.assertCanAddUser(actor.getCompanyId());
         AppUser created = users.save(new AppUser(actor.getCompanyId(), email, passwordEncoder.encode(request.password()), role));
         return UserSummary.from(created);
     }
