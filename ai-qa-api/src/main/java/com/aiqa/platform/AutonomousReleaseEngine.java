@@ -29,7 +29,7 @@ public class AutonomousReleaseEngine {
         int passed = Math.max(0, generated - Math.max(0, input.simulatedFailures()));
         boolean healed = input.simulatedFailures() > 0 && input.healingEnabled();
         boolean successful = passed == generated || healed;
-        return new SelfUatResult(generated, executed, passed, generated - passed, healed, successful ? "PASS" : "FAIL");
+        return new SelfUatResult(generated, executed, passed, generated - passed, healed, successful, successful ? "PASS" : "FAIL");
     }
 
     public GateDecision gate(ReleaseInput release, List<AgentVote> votes, SelfUatInput selfUatInput, GovernanceEngine.PolicyDecision policy, ReliabilityEngine.SloDecision slo) {
