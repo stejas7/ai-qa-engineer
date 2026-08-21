@@ -26,13 +26,13 @@ import java.util.stream.Collectors;
 public class ApiClientService {
     private static final Duration TOKEN_TTL = Duration.ofMinutes(30);
 
-    private final ApiClientRepository clients;
-    private final ApiAccessTokenRepository tokens;
+    private final ExternalApiClientRepository clients;
+    private final ExternalApiAccessTokenRepository tokens;
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
 
-    public ApiClientService(ApiClientRepository clients,
-                            ApiAccessTokenRepository tokens,
+    public ApiClientService(ExternalApiClientRepository clients,
+                            ExternalApiAccessTokenRepository tokens,
                             AppUserRepository users,
                             PasswordEncoder passwordEncoder) {
         this.clients = clients;
