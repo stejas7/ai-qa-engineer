@@ -213,7 +213,7 @@ jobs:
           retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"google"' google-sso
           retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"github"' github-sso
 
-      - name: Verify Platform Admin login
+      - name: Verify Platform Owner login
         env:
           ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
@@ -223,13 +223,13 @@ jobs:
           curl --connect-timeout 5 --max-time 15 -fsS -c /tmp/admin.cookies -H 'Content-Type: application/json' -d "$payload" "$PUBLIC_BASE_URL/api/auth/login" >/tmp/admin-login.json
           curl --connect-timeout 5 --max-time 15 -fsS -b /tmp/admin.cookies "$PUBLIC_BASE_URL/api/auth/me" >/tmp/admin-me.json
           cat /tmp/admin-me.json
-          grep -q 'PLATFORM_ADMIN' /tmp/admin-me.json
+          grep -Eq '"role":"(PLATFORM_ADMIN|SUPER_ADMIN)"' /tmp/admin-me.json
 
       - name: Deployment summary
         if: always()
         run: |
           echo "## AI UAT Main Pipeline" >> "$GITHUB_STEP_SUMMARY"
-          echo "Build → Image → EC2 → Health → Spring AI → Google/GitHub SSO → Platform Admin" >> "$GITHUB_STEP_SUMMARY"
+          echo "Build → Image → EC2 → Health → Spring AI → Google/GitHub SSO → Platform Owner" >> "$GITHUB_STEP_SUMMARY"
           echo "Load testing is intentionally separate." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup runner secrets
