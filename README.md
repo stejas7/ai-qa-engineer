@@ -156,6 +156,29 @@ Frontend: React • TypeScript • Vite • React Router • TanStack Query.
 - runtime credentials are referenced and resolved only at execution time
 - raw credential values, API secrets and password reset tokens are never returned in reporting payloads
 
+### SSO / OAuth2
+
+Google and GitHub OAuth2 login are supported when the corresponding client credentials are configured. SSO is deliberately **existing-user only**: a successful identity-provider login must map to an already registered, active AI UAT Engineer user and never creates a company or tenant implicitly.
+
+```text
+Browser → /oauth2/authorization/{provider}
+        → Google / GitHub authentication
+        → verified email resolution
+        → existing active application-user lookup
+        → role + tenant session mapping
+        → /account
+```
+
+GitHub accounts that do not expose an email in the default user-info response use the provider's verified-email endpoint as a fallback. The application records security-safe SSO diagnostics for provider, success/failure reason, mapped user ID, company ID and role. Access tokens, client secrets, passwords and raw OAuth credentials are never written to these SSO logs.
+
+Useful checks:
+
+```text
+GET /api/auth/sso/providers
+GET /oauth2/authorization/google
+GET /oauth2/authorization/github
+```
+
 ## Core Capabilities
 
 - Requirement intelligence and change-impact analysis
@@ -168,6 +191,7 @@ Frontend: React • TypeScript • Vite • React Router • TanStack Query.
 - Failure classification, flaky-test intelligence and bounded healing
 - Evidence, traceability and release-quality decisions
 - Multi-tenant company/product/user/security model
+- Existing-user Google/GitHub SSO with verified-email mapping and safe audit logging
 - Forgot-password single-use reset-token flow
 - Super Admin diagnostics and platform analytics
 - Tenant governance limits and durable metadata-only security audit
@@ -181,6 +205,8 @@ Frontend: React • TypeScript • Vite • React Router • TanStack Query.
 | POST | `/api/auth/register` | Register company and first Company Admin |
 | POST | `/api/auth/login` | Sign in |
 | GET | `/api/auth/me` | Current authenticated user |
+| GET | `/api/auth/sso/providers` | Discover configured SSO providers |
+| GET | `/oauth2/authorization/{provider}` | Start Google/GitHub OAuth2 login |
 | POST | `/api/auth/password/forgot` | Request password reset |
 | POST | `/api/auth/password/reset` | Complete password reset |
 | GET | `/api/company/products` | Tenant product environments |
