@@ -14,7 +14,7 @@ permissions:
   packages: write
 
 env:
-  PUBLIC_BASE_URL: https://auravis-uat.duckdns.org
+  PUBLIC_BASE_URL: https://ai-uat.duckdns.org
   IMAGE_NAME: ghcr.io/stejas7/ai-qa-engineer
 
 jobs:
