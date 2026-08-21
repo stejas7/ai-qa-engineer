@@ -219,11 +219,7 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
         run: |
           set -Eeuo pipefail
-          payload=$(python3 - <<'PY'
-import json, os
-print(json.dumps({'email': os.environ['ADMIN_EMAIL'], 'password': os.environ['ADMIN_PASSWORD']}))
-PY
-)
+          payload=$(python3 -c 'import json, os; print(json.dumps({"email": os.environ["ADMIN_EMAIL"], "password": os.environ["ADMIN_PASSWORD"]}))')
           curl --connect-timeout 5 --max-time 15 -fsS -c /tmp/admin.cookies -H 'Content-Type: application/json' -d "$payload" "$PUBLIC_BASE_URL/api/auth/login" >/tmp/admin-login.json
           curl --connect-timeout 5 --max-time 15 -fsS -b /tmp/admin.cookies "$PUBLIC_BASE_URL/api/auth/me" >/tmp/admin-me.json
           cat /tmp/admin-me.json
@@ -239,5 +235,3 @@ PY
       - name: Cleanup runner secrets
         if: always()
         run: rm -f "$RUNNER_TEMP/ec2_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json
-
-# Redeploy trigger: ai-uat.duckdns.org migration
