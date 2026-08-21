@@ -72,6 +72,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/release-approvals/**")
                             .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER", "TESTER", "VIEWER")
 
+                        .requestMatchers("/api/agent-workforce/**", "/api/intelligence/**")
+                            .authenticated()
+
                         .requestMatchers(HttpMethod.POST, "/api/automation-scripts/**", "/api/test-management/**", "/api/performance/**")
                             .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER", "TESTER")
                         .requestMatchers(HttpMethod.PUT, "/api/automation-scripts/**", "/api/test-management/**")
