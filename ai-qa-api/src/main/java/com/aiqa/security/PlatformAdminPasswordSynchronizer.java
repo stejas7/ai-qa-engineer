@@ -6,10 +6,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-/**
- * Keeps the existing PLATFORM_ADMIN password aligned with deployment secrets.
- * It never creates, renames, or modifies tenant users.
- */
+/** Keeps the configured platform-owner password aligned with deployment secrets. */
 @Component
 public class PlatformAdminPasswordSynchronizer implements ApplicationRunner {
     private final AppUserRepository users;
@@ -30,13 +27,11 @@ public class PlatformAdminPasswordSynchronizer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (adminEmail.isBlank() || adminPassword.isBlank()) {
-            return;
-        }
+        if (adminEmail.isBlank() || adminPassword.isBlank()) return;
         AppUser user = users.findByEmailIgnoreCase(adminEmail)
                 .orElseThrow(() -> new IllegalStateException("Configured platform admin email does not exist"));
-        if (user.getRole() != UserRole.PLATFORM_ADMIN) {
-            throw new IllegalStateException("Configured platform admin email is not a PLATFORM_ADMIN");
+        if (!user.getRole().isPlatformAdmin()) {
+            throw new IllegalStateException("Configured platform admin email is not a platform-owner role");
         }
         user.replacePasswordHash(passwordEncoder.encode(adminPassword));
         users.save(user);
