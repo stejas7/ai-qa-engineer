@@ -166,21 +166,21 @@ jobs:
           retry_json() {
             name="$1"; url="$2"; pattern="$3"; attempts="${4:-20}"
             for i in $(seq 1 "$attempts"); do
-              if curl --connect-timeout 3 --max-time 10 -fsS "$url" > "/tmp/$name.json" 2>/tmp/$name.err; then
-                if grep -q "$pattern" "/tmp/$name.json"; then
-                  echo "$name OK on attempt $i"
-                  cat "/tmp/$name.json"
-                  return 0
-                fi
+              code=$(curl --connect-timeout 3 --max-time 10 -sS -o "/tmp/$name.json" -w '%{http_code}' "$url" 2>"/tmp/$name.err" || true)
+              body=$(cat "/tmp/$name.json" 2>/dev/null || true)
+              echo "$name attempt $i/$attempts -> HTTP $code"
+              if [ "$code" = "200" ] && echo "$body" | grep -q "$pattern"; then
+                echo "$name OK"
+                echo "$body"
+                return 0
               fi
-              echo "$name not ready (attempt $i/$attempts)"
               cat "/tmp/$name.err" 2>/dev/null || true
               sleep 3
             done
             echo "$name verification failed"
             cat "/tmp/$name.json" 2>/dev/null || true
             sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
-            sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=200 ai-qa-api || true
+            sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=250 ai-qa-api || true
             return 1
           }
 
@@ -197,23 +197,55 @@ jobs:
           retry() {
             url="$1"; pattern="$2"; name="$3"
             for i in $(seq 1 20); do
-              response=$(curl --connect-timeout 5 --max-time 12 -fsS "$url" 2>/dev/null || true)
-              if echo "$response" | grep -q "$pattern"; then
+              response_file="/tmp/public-$name.out"
+              error_file="/tmp/public-$name.err"
+              code=$(curl --connect-timeout 5 --max-time 12 -sS -o "$response_file" -w '%{http_code}' "$url" 2>"$error_file" || true)
+              response=$(cat "$response_file" 2>/dev/null || true)
+              echo "$name attempt $i/20 -> HTTP $code"
+              if [ "$code" = "200" ] && echo "$response" | grep -q "$pattern"; then
                 echo "$name OK"
                 echo "$response"
                 return 0
               fi
+              cat "$error_file" 2>/dev/null || true
               sleep 3
             done
-            echo "$name failed"
-            exit 1
+            echo "$name failed for $url"
+            echo "Last response:"
+            cat "$response_file" 2>/dev/null || true
+            echo "DNS lookup:"
+            getent hosts ai-uat.duckdns.org || true
+            echo "TLS/headers:"
+            curl -vkI --connect-timeout 5 --max-time 15 "$url" || true
+            return 1
           }
           retry "$PUBLIC_BASE_URL/actuator/health" '"status":"UP"' health
           retry "$PUBLIC_BASE_URL/api/ai/runtime" '"framework":"Spring AI"' runtime
           retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"google"' google-sso
           retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"github"' github-sso
 
-      - name: Verify Platform Admin login
+      - name: Dump EC2 diagnostics on failure
+        if: failure()
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          set +e
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+          ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE'
+          echo "=== docker compose ps ==="
+          sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
+          echo "=== ai-qa-api logs ==="
+          sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=300 ai-qa-api || true
+          echo "=== local health ==="
+          curl -i --max-time 10 http://localhost:8080/actuator/health || true
+          echo "=== local runtime ==="
+          curl -i --max-time 10 http://localhost:8080/api/ai/runtime || true
+          echo "=== local sso providers ==="
+          curl -i --max-time 10 http://localhost:8080/api/auth/sso/providers || true
+          REMOTE
+
+      - name: Verify Platform Owner login
         env:
           ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
@@ -223,15 +255,15 @@ jobs:
           curl --connect-timeout 5 --max-time 15 -fsS -c /tmp/admin.cookies -H 'Content-Type: application/json' -d "$payload" "$PUBLIC_BASE_URL/api/auth/login" >/tmp/admin-login.json
           curl --connect-timeout 5 --max-time 15 -fsS -b /tmp/admin.cookies "$PUBLIC_BASE_URL/api/auth/me" >/tmp/admin-me.json
           cat /tmp/admin-me.json
-          grep -q 'PLATFORM_ADMIN' /tmp/admin-me.json
+          grep -Eq '"role":"(PLATFORM_ADMIN|SUPER_ADMIN)"' /tmp/admin-me.json
 
       - name: Deployment summary
         if: always()
         run: |
           echo "## AI UAT Main Pipeline" >> "$GITHUB_STEP_SUMMARY"
-          echo "Build → Image → EC2 → Health → Spring AI → Google/GitHub SSO → Platform Admin" >> "$GITHUB_STEP_SUMMARY"
+          echo "Build → Image → EC2 → Health → Spring AI → Google/GitHub SSO → Platform Owner" >> "$GITHUB_STEP_SUMMARY"
           echo "Load testing is intentionally separate." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup runner secrets
         if: always()
-        run: rm -f "$RUNNER_TEMP/ec2_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json
+        run: rm -f "$RUNNER_TEMP/ec2_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json /tmp/public-*.out /tmp/public-*.err
