@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/** M15 tenant-safe company user administration. */
+/** M15/M21 tenant-safe company user administration with multi-admin safeguards. */
 @Service
 public class CompanyUserService {
     private final AppUserRepository users;
@@ -36,14 +36,52 @@ public class CompanyUserService {
         return UserSummary.from(created);
     }
 
+    public UserSummary changeRole(String actorEmail, UUID userId, String rawRole) {
+        AppUser actor = requireCompanyAdmin(actorEmail);
+        AppUser target = requireSameTenant(actor, userId);
+        UserRole nextRole = validateManagedRole(rawRole);
+        if (target.getRole() == UserRole.COMPANY_ADMIN && nextRole != UserRole.COMPANY_ADMIN) {
+            ensureAnotherActiveCompanyAdmin(actor.getCompanyId(), target.getId());
+        }
+        target.changeRole(nextRole);
+        return UserSummary.from(users.save(target));
+    }
+
     public UserSummary deactivateUser(String actorEmail, UUID userId) {
         AppUser actor = requireCompanyAdmin(actorEmail);
+        AppUser target = requireSameTenant(actor, userId);
+        if (actor.getId() != null && actor.getId().equals(target.getId())) {
+            throw new IllegalStateException("Company admin cannot deactivate their own account");
+        }
+        if (target.getRole() == UserRole.COMPANY_ADMIN) {
+            ensureAnotherActiveCompanyAdmin(actor.getCompanyId(), target.getId());
+        }
+        target.deactivate();
+        return UserSummary.from(users.save(target));
+    }
+
+    public UserSummary activateUser(String actorEmail, UUID userId) {
+        AppUser actor = requireCompanyAdmin(actorEmail);
+        AppUser target = requireSameTenant(actor, userId);
+        target.activate();
+        return UserSummary.from(users.save(target));
+    }
+
+    private AppUser requireSameTenant(AppUser actor, UUID userId) {
         if (userId == null) throw new IllegalArgumentException("userId is required");
         AppUser target = users.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (!actor.getCompanyId().equals(target.getCompanyId())) throw new SecurityException("Cross-tenant user access denied");
-        if (actor.getId() != null && actor.getId().equals(target.getId())) throw new IllegalStateException("Company admin cannot deactivate their own account");
-        target.deactivate();
-        return UserSummary.from(users.save(target));
+        if (target.getRole().isPlatformAdmin()) throw new SecurityException("Platform owner accounts cannot be managed by company admins");
+        return target;
+    }
+
+    private void ensureAnotherActiveCompanyAdmin(UUID companyId, UUID excludedId) {
+        long activeAdmins = users.findByCompanyIdOrderByCreatedAtAsc(companyId).stream()
+                .filter(AppUser::isActive)
+                .filter(user -> user.getRole() == UserRole.COMPANY_ADMIN)
+                .filter(user -> excludedId == null || !excludedId.equals(user.getId()))
+                .count();
+        if (activeAdmins == 0) throw new IllegalStateException("At least one active Company Admin must remain");
     }
 
     private AppUser requireCompanyAdmin(String email) {
@@ -59,8 +97,8 @@ public class CompanyUserService {
         final UserRole role;
         try { role = UserRole.valueOf(rawRole.trim().toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException e) { throw new IllegalArgumentException("Unsupported role"); }
-        if (role == UserRole.PLATFORM_ADMIN || role == UserRole.COMPANY_ADMIN) {
-            throw new IllegalArgumentException("Company admins may create QA_MANAGER, TESTER or VIEWER users only");
+        if (role.isPlatformAdmin()) {
+            throw new IllegalArgumentException("Platform owner roles cannot be assigned from a company tenant");
         }
         return role;
     }
@@ -79,6 +117,7 @@ public class CompanyUserService {
     }
 
     public record CreateUserRequest(String email, String password, String role) {}
+    public record ChangeRoleRequest(String role) {}
     public record UserSummary(UUID id, UUID companyId, String email, String role, boolean active) {
         static UserSummary from(AppUser user) {
             return new UserSummary(user.getId(), user.getCompanyId(), user.getEmail(), user.getRole().name(), user.isActive());
