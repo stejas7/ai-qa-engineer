@@ -1,0 +1,241 @@
+name: AI UAT Main Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ai-uat-main
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  PUBLIC_BASE_URL: https://auravis-uat.duckdns.org
+  IMAGE_NAME: ghcr.io/stejas7/ai-qa-engineer
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aiqa
+          POSTGRES_USER: aiqa
+          POSTGRES_PASSWORD: aiqa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aiqa -d aiqa"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build backend
+        run: mvn -B -Dmaven.test.skip=true package
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push immutable image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ai-qa-api/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Validate deployment secrets
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          AI_UAT_PLATFORM_ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
+          AI_UAT_PLATFORM_ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          AI_UAT_GITHUB_CLIENT_ID: ${{ secrets.AI_UAT_GITHUB_CLIENT_ID }}
+          AI_UAT_GITHUB_CLIENT_SECRET: ${{ secrets.AI_UAT_GITHUB_CLIENT_SECRET }}
+        run: |
+          set -Eeuo pipefail
+          for v in EC2_HOST EC2_USERNAME EC2_SSH_KEY AI_UAT_PLATFORM_ADMIN_EMAIL AI_UAT_PLATFORM_ADMIN_PASSWORD GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET AI_UAT_GITHUB_CLIENT_ID AI_UAT_GITHUB_CLIENT_SECRET; do
+            if [ -z "${!v:-}" ]; then
+              echo "Missing required secret: $v"
+              exit 1
+            fi
+          done
+          case "$EC2_HOST" in
+            http://*|https://*|*:*|*/*|*' '*) echo "EC2_HOST must contain only host/IP"; exit 1;;
+          esac
+          echo "Deployment secrets present; SSO required"
+
+      - name: Prepare SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          printf '%s\n' "$EC2_SSH_KEY" > "$RUNNER_TEMP/ec2_key"
+          chmod 600 "$RUNNER_TEMP/ec2_key"
+
+      - name: EC2 preflight
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          set -Eeuo pipefail
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+          timeout 75 ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'echo "SSH OK"; df -h /; sudo docker --version'
+
+      - name: Deploy image to EC2
+        timeout-minutes: 8
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_UAT_PLATFORM_ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
+          AI_UAT_PLATFORM_ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GITHUB_CLIENT_ID: ${{ secrets.AI_UAT_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.AI_UAT_GITHUB_CLIENT_SECRET }}
+        run: |
+          set -Eeuo pipefail
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+          printf '%s' "$GHCR_TOKEN" | ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+          ADMIN_EMAIL_B64=$(printf '%s' "$AI_UAT_PLATFORM_ADMIN_EMAIL" | base64 -w0)
+          ADMIN_PASSWORD_B64=$(printf '%s' "$AI_UAT_PLATFORM_ADMIN_PASSWORD" | base64 -w0)
+          GOOGLE_ID_B64=$(printf '%s' "$GOOGLE_CLIENT_ID" | base64 -w0)
+          GOOGLE_SECRET_B64=$(printf '%s' "$GOOGLE_CLIENT_SECRET" | base64 -w0)
+          GITHUB_ID_B64=$(printf '%s' "$GITHUB_CLIENT_ID" | base64 -w0)
+          GITHUB_SECRET_B64=$(printf '%s' "$GITHUB_CLIENT_SECRET" | base64 -w0)
+
+          timeout 7m ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" "IMAGE='$IMAGE' ADMIN_EMAIL_B64='$ADMIN_EMAIL_B64' ADMIN_PASSWORD_B64='$ADMIN_PASSWORD_B64' GOOGLE_ID_B64='$GOOGLE_ID_B64' GOOGLE_SECRET_B64='$GOOGLE_SECRET_B64' GITHUB_ID_B64='$GITHUB_ID_B64' GITHUB_SECRET_B64='$GITHUB_SECRET_B64' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          cd ~/ai-qa-engineer
+          git fetch --prune origin main
+          git reset --hard origin/main
+
+          previous_image=$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)
+          printf '%s' "$previous_image" > /tmp/ai-uat-previous-image
+
+          timeout 300 sudo docker pull "$IMAGE"
+
+          export AI_QA_IMAGE="$IMAGE"
+          export AI_UAT_PLATFORM_ADMIN_EMAIL=$(printf '%s' "$ADMIN_EMAIL_B64" | base64 -d)
+          export AI_UAT_PLATFORM_ADMIN_PASSWORD=$(printf '%s' "$ADMIN_PASSWORD_B64" | base64 -d)
+          export SPRING_PROFILES_ACTIVE=sso
+          export GOOGLE_CLIENT_ID=$(printf '%s' "$GOOGLE_ID_B64" | base64 -d)
+          export GOOGLE_CLIENT_SECRET=$(printf '%s' "$GOOGLE_SECRET_B64" | base64 -d)
+          export GITHUB_CLIENT_ID=$(printf '%s' "$GITHUB_ID_B64" | base64 -d)
+          export GITHUB_CLIENT_SECRET=$(printf '%s' "$GITHUB_SECRET_B64" | base64 -d)
+
+          sudo -E docker compose up -d --remove-orphans
+          sudo docker compose ps
+          REMOTE
+
+      - name: Verify local health, Spring AI and SSO with retries
+        timeout-minutes: 4
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          set -Eeuo pipefail
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+          ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+
+          retry_json() {
+            name="$1"; url="$2"; pattern="$3"; attempts="${4:-20}"
+            for i in $(seq 1 "$attempts"); do
+              if curl --connect-timeout 3 --max-time 10 -fsS "$url" > "/tmp/$name.json" 2>/tmp/$name.err; then
+                if grep -q "$pattern" "/tmp/$name.json"; then
+                  echo "$name OK on attempt $i"
+                  cat "/tmp/$name.json"
+                  return 0
+                fi
+              fi
+              echo "$name not ready (attempt $i/$attempts)"
+              cat "/tmp/$name.err" 2>/dev/null || true
+              sleep 3
+            done
+            echo "$name verification failed"
+            cat "/tmp/$name.json" 2>/dev/null || true
+            sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
+            sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=200 ai-qa-api || true
+            return 1
+          }
+
+          retry_json health http://localhost:8080/actuator/health '"status":"UP"' 30
+          retry_json runtime http://localhost:8080/api/ai/runtime '"framework":"Spring AI"' 20
+          retry_json sso-google http://localhost:8080/api/auth/sso/providers '"google"' 20
+          retry_json sso-github http://localhost:8080/api/auth/sso/providers '"github"' 20
+          REMOTE
+
+      - name: Verify public health and SSO
+        timeout-minutes: 3
+        run: |
+          set -Eeuo pipefail
+          retry() {
+            url="$1"; pattern="$2"; name="$3"
+            for i in $(seq 1 20); do
+              response=$(curl --connect-timeout 5 --max-time 12 -fsS "$url" 2>/dev/null || true)
+              if echo "$response" | grep -q "$pattern"; then
+                echo "$name OK"
+                echo "$response"
+                return 0
+              fi
+              sleep 3
+            done
+            echo "$name failed"
+            exit 1
+          }
+          retry "$PUBLIC_BASE_URL/actuator/health" '"status":"UP"' health
+          retry "$PUBLIC_BASE_URL/api/ai/runtime" '"framework":"Spring AI"' runtime
+          retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"google"' google-sso
+          retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"github"' github-sso
+
+      - name: Verify Platform Admin login
+        env:
+          ADMIN_EMAIL: ${{ secrets.AI_UAT_PLATFORM_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.AI_UAT_PLATFORM_ADMIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          payload=$(python3 - <<'PY'
+import json, os
+print(json.dumps({'email': os.environ['ADMIN_EMAIL'], 'password': os.environ['ADMIN_PASSWORD']}))
+PY
+)
+          curl --connect-timeout 5 --max-time 15 -fsS -c /tmp/admin.cookies -H 'Content-Type: application/json' -d "$payload" "$PUBLIC_BASE_URL/api/auth/login" >/tmp/admin-login.json
+          curl --connect-timeout 5 --max-time 15 -fsS -b /tmp/admin.cookies "$PUBLIC_BASE_URL/api/auth/me" >/tmp/admin-me.json
+          cat /tmp/admin-me.json
+          grep -q 'PLATFORM_ADMIN' /tmp/admin-me.json
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## AI UAT Main Pipeline" >> "$GITHUB_STEP_SUMMARY"
+          echo "Build → Image → EC2 → Health → Spring AI → Google/GitHub SSO → Platform Admin" >> "$GITHUB_STEP_SUMMARY"
+          echo "Load testing is intentionally separate." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup runner secrets
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ec2_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json
