@@ -58,6 +58,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/company/uat/**")
                             .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER", "TESTER")
 
+                        .requestMatchers(HttpMethod.POST, "/api/integrations/**")
+                            .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/integrations/**")
+                            .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER")
+                        .requestMatchers("/api/integrations/**")
+                            .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER", "TESTER", "VIEWER")
+
                         .requestMatchers(HttpMethod.POST, "/api/automation-scripts/**", "/api/test-management/**", "/api/performance/**")
                             .hasAnyRole("COMPANY_ADMIN", "QA_MANAGER", "TESTER")
                         .requestMatchers(HttpMethod.PUT, "/api/automation-scripts/**", "/api/test-management/**")
