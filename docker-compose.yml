@@ -37,9 +37,12 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
     ports:
       - "8080:8080"
+    volumes:
+      - execution_evidence:/app/evidence
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  execution_evidence:
