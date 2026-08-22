@@ -1,12 +1,18 @@
-name: AI UAT Main Pipeline
+name: AI UAT Pipeline
 
 on:
   push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'hotfix/**'
+      - 'chore/**'
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: ai-uat-main
+  group: ai-uat-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -18,22 +24,9 @@ env:
   IMAGE_NAME: ghcr.io/stejas7/ai-qa-engineer
 
 jobs:
-  build-deploy:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: aiqa
-          POSTGRES_USER: aiqa
-          POSTGRES_PASSWORD: aiqa
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U aiqa -d aiqa"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +40,15 @@ jobs:
 
       - name: Build backend
         run: mvn -B -Dmaven.test.skip=true package
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -85,7 +87,6 @@ jobs:
           case "$EC2_HOST" in
             http://*|https://*|*:*|*/*|*' '*) echo "EC2_HOST must contain only host/IP"; exit 1;;
           esac
-          echo "Deployment secrets present; SSO required"
 
       - name: Prepare SSH key
         env:
@@ -133,12 +134,7 @@ jobs:
           cd ~/ai-qa-engineer
           git fetch --prune origin main
           git reset --hard origin/main
-
-          previous_image=$(sudo docker inspect ai-qa-api --format '{{.Config.Image}}' 2>/dev/null || true)
-          printf '%s' "$previous_image" > /tmp/ai-uat-previous-image
-
           timeout 300 sudo docker pull "$IMAGE"
-
           export AI_QA_IMAGE="$IMAGE"
           export AI_UAT_PLATFORM_ADMIN_EMAIL=$(printf '%s' "$ADMIN_EMAIL_B64" | base64 -d)
           export AI_UAT_PLATFORM_ADMIN_PASSWORD=$(printf '%s' "$ADMIN_PASSWORD_B64" | base64 -d)
@@ -147,7 +143,6 @@ jobs:
           export GOOGLE_CLIENT_SECRET=$(printf '%s' "$GOOGLE_SECRET_B64" | base64 -d)
           export GITHUB_CLIENT_ID=$(printf '%s' "$GITHUB_ID_B64" | base64 -d)
           export GITHUB_CLIENT_SECRET=$(printf '%s' "$GITHUB_SECRET_B64" | base64 -d)
-
           sudo -E docker compose up -d --remove-orphans
           sudo docker compose ps
           REMOTE
@@ -162,7 +157,6 @@ jobs:
           SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
           ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE'
           set -Eeuo pipefail
-
           retry_json() {
             name="$1"; url="$2"; pattern="$3"; attempts="${4:-20}"
             for i in $(seq 1 "$attempts"); do
@@ -171,19 +165,15 @@ jobs:
               echo "$name attempt $i/$attempts -> HTTP $code"
               if [ "$code" = "200" ] && echo "$body" | grep -q "$pattern"; then
                 echo "$name OK"
-                echo "$body"
                 return 0
               fi
               cat "/tmp/$name.err" 2>/dev/null || true
               sleep 3
             done
-            echo "$name verification failed"
-            cat "/tmp/$name.json" 2>/dev/null || true
             sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
             sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=250 ai-qa-api || true
             return 1
           }
-
           retry_json health http://localhost:8080/actuator/health '"status":"UP"' 30
           retry_json runtime http://localhost:8080/api/ai/runtime '"framework":"Spring AI"' 20
           retry_json sso-google http://localhost:8080/api/auth/sso/providers '"google"' 20
@@ -204,46 +194,17 @@ jobs:
               echo "$name attempt $i/20 -> HTTP $code"
               if [ "$code" = "200" ] && echo "$response" | grep -q "$pattern"; then
                 echo "$name OK"
-                echo "$response"
                 return 0
               fi
               cat "$error_file" 2>/dev/null || true
               sleep 3
             done
-            echo "$name failed for $url"
-            echo "Last response:"
-            cat "$response_file" 2>/dev/null || true
-            echo "DNS lookup:"
-            getent hosts ai-uat.duckdns.org || true
-            echo "TLS/headers:"
-            curl -vkI --connect-timeout 5 --max-time 15 "$url" || true
             return 1
           }
           retry "$PUBLIC_BASE_URL/actuator/health" '"status":"UP"' health
           retry "$PUBLIC_BASE_URL/api/ai/runtime" '"framework":"Spring AI"' runtime
           retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"google"' google-sso
           retry "$PUBLIC_BASE_URL/api/auth/sso/providers" '"github"' github-sso
-
-      - name: Dump EC2 diagnostics on failure
-        if: failure()
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-        run: |
-          set +e
-          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
-          ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE'
-          echo "=== docker compose ps ==="
-          sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
-          echo "=== ai-qa-api logs ==="
-          sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=300 ai-qa-api || true
-          echo "=== local health ==="
-          curl -i --max-time 10 http://localhost:8080/actuator/health || true
-          echo "=== local runtime ==="
-          curl -i --max-time 10 http://localhost:8080/api/ai/runtime || true
-          echo "=== local sso providers ==="
-          curl -i --max-time 10 http://localhost:8080/api/auth/sso/providers || true
-          REMOTE
 
       - name: Verify Platform Owner login
         env:
@@ -254,15 +215,21 @@ jobs:
           payload=$(python3 -c 'import json, os; print(json.dumps({"email": os.environ["ADMIN_EMAIL"], "password": os.environ["ADMIN_PASSWORD"]}))')
           curl --connect-timeout 5 --max-time 15 -fsS -c /tmp/admin.cookies -H 'Content-Type: application/json' -d "$payload" "$PUBLIC_BASE_URL/api/auth/login" >/tmp/admin-login.json
           curl --connect-timeout 5 --max-time 15 -fsS -b /tmp/admin.cookies "$PUBLIC_BASE_URL/api/auth/me" >/tmp/admin-me.json
-          cat /tmp/admin-me.json
           grep -Eq '"role":"(PLATFORM_ADMIN|SUPER_ADMIN)"' /tmp/admin-me.json
 
-      - name: Deployment summary
-        if: always()
+      - name: Dump EC2 diagnostics on failure
+        if: failure()
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
         run: |
-          echo "## AI UAT Main Pipeline" >> "$GITHUB_STEP_SUMMARY"
-          echo "Build → Image → EC2 → Health → Spring AI → Google/GitHub SSO → Platform Owner" >> "$GITHUB_STEP_SUMMARY"
-          echo "Load testing is intentionally separate." >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+          ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE'
+          sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
+          sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=300 ai-qa-api || true
+          curl -i --max-time 10 http://localhost:8080/actuator/health || true
+          REMOTE
 
       - name: Cleanup runner secrets
         if: always()
