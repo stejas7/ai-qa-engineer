@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * M39-M70 platform evolution contracts. Capabilities remain explicit and auditable so
+ * M39-M80 platform evolution contracts. Capabilities remain explicit and auditable so
  * autonomous behavior can be enabled incrementally rather than hidden inside agents.
  *
  * @author Tejas Shah
@@ -44,7 +44,17 @@ public class PlatformEvolutionCatalog {
             new Milestone(67, "Test Selection Optimizer v2", "AUTONOMY", List.of("risk-per-minute scoring", "budget adherence", "critical-first selection")),
             new Milestone(68, "Evidence Confidence", "QUALITY", List.of("assertion confidence", "screenshot/trace/video evidence", "confidence level")),
             new Milestone(69, "Defect Deduplication", "QUALITY", List.of("normalized signatures", "component-aware grouping", "duplicate suppression")),
-            new Milestone(70, "Cross-Release Memory", "ADAPTATION", List.of("release history", "risk trend", "gate-tightening recommendation"))
+            new Milestone(70, "Cross-Release Memory", "ADAPTATION", List.of("release history", "risk trend", "gate-tightening recommendation")),
+            new Milestone(71, "Business Journey Model", "BUSINESS", List.of("ordered journey steps", "critical outcomes", "journey readiness")),
+            new Milestone(72, "Critical Path UAT", "BUSINESS", List.of("critical-step selection", "bounded journey scope", "business-first execution")),
+            new Milestone(73, "Accessibility UAT", "QUALITY", List.of("check coverage", "critical violation gate", "accessibility score")),
+            new Milestone(74, "Security Regression Planner", "SECURITY", List.of("security-sensitive changes", "risk-focused components", "regression severity")),
+            new Milestone(75, "Performance Regression Planner", "PERFORMANCE", List.of("latency-sensitive changes", "database/cache impact", "focused load scope")),
+            new Milestone(76, "Localization Coverage", "QUALITY", List.of("required locales", "missing locales", "coverage percent")),
+            new Milestone(77, "Device Matrix Planner", "QUALITY", List.of("browser/viewports", "bounded matrix", "cross-device coverage")),
+            new Milestone(78, "Synthetic Persona Planner", "DATA", List.of("role personas", "boundary scenarios", "permission scenarios")),
+            new Milestone(79, "Negative Path Generator", "QUALITY", List.of("required-field mutations", "boundary violations", "wrong-type cases")),
+            new Milestone(80, "Requirement Ambiguity Resolver", "INTELLIGENCE", List.of("vague-language signals", "condition detection", "expected-behavior detection"))
     );
 
     public List<Milestone> milestones() { return MILESTONES; }
