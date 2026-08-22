@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * M39-M90 platform evolution contracts. Capabilities remain explicit and auditable so
+ * M39-M100 platform evolution contracts. Capabilities remain explicit and auditable so
  * autonomous behavior can be enabled incrementally rather than hidden inside agents.
  *
  * @author Tejas Shah
@@ -64,7 +64,17 @@ public class PlatformEvolutionCatalog {
             new Milestone(87, "Agent Performance Scorecards", "WORKFORCE", List.of("success rate", "evidence quality", "SLA/rework score")),
             new Milestone(88, "Agent Quality Calibration", "WORKFORCE", List.of("score mean", "target delta", "quality calibration")),
             new Milestone(89, "Mission SLA Planning", "RELIABILITY", List.of("parallel execution estimate", "evidence time", "approval time")),
-            new Milestone(90, "Executive Release Portfolio", "GOVERNANCE", List.of("ready/blocked portfolio", "average risk", "executive attention state"))
+            new Milestone(90, "Executive Release Portfolio", "GOVERNANCE", List.of("ready/blocked portfolio", "average risk", "executive attention state")),
+            new Milestone(91, "Governance Coverage", "GOVERNANCE", List.of("required controls", "implemented controls", "evidence coverage")),
+            new Milestone(92, "Policy Simulation", "GOVERNANCE", List.of("what-if release policy", "triggered rules", "pass/review/block decision")),
+            new Milestone(93, "Approval Efficiency", "GOVERNANCE", List.of("approval latency", "SLA breaches", "review bottlenecks")),
+            new Milestone(94, "Incident Learning", "ADAPTATION", List.of("incident categories", "repeat-pattern learning", "focus recommendation")),
+            new Milestone(95, "Rollback Intelligence", "RELEASE", List.of("risk/error/latency signals", "critical incident override", "rollback recommendation")),
+            new Milestone(96, "Resilience Validation", "RELIABILITY", List.of("resilience probes", "failure count", "resilience state")),
+            new Milestone(97, "Evidence Retention Governance", "COMPLIANCE", List.of("data classes", "sensitive retention", "audit-critical retention")),
+            new Milestone(98, "AI Model Governance", "GOVERNANCE", List.of("evaluation score", "drift control", "versioned prompts and evidence")),
+            new Milestone(99, "Human Override Analytics", "GOVERNANCE", List.of("override reasons", "frequency", "policy threshold review")),
+            new Milestone(100, "Enterprise Autonomy Readiness", "AUTONOMY", List.of("governance readiness", "model/resilience readiness", "human override and rollback controls"))
     );
 
     public List<Milestone> milestones() { return MILESTONES; }
