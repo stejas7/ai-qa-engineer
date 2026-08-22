@@ -2,11 +2,7 @@ name: AI UAT Pipeline
 
 on:
   push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'hotfix/**'
-      - 'chore/**'
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -42,7 +38,7 @@ jobs:
         run: mvn -B -Dmaven.test.skip=true package
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -218,19 +214,31 @@ jobs:
           grep -Eq '"role":"(PLATFORM_ADMIN|SUPER_ADMIN)"' /tmp/admin-me.json
 
       - name: Dump EC2 diagnostics on failure
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           set +e
-          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$RUNNER_TEMP/ec2_key")
+          if [ -z "${EC2_SSH_KEY:-}" ]; then
+            echo "EC2_SSH_KEY unavailable; skipping remote diagnostics"
+            exit 0
+          fi
+          DIAG_KEY="$RUNNER_TEMP/ec2_diag_key"
+          printf '%s\n' "$EC2_SSH_KEY" > "$DIAG_KEY"
+          chmod 600 "$DIAG_KEY"
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=no -i "$DIAG_KEY")
           ssh "${SSH_OPTS[@]}" "$EC2_USERNAME@$EC2_HOST" 'bash -se' <<'REMOTE'
+          echo "=== containers ==="
           sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml ps || true
+          echo "=== backend logs ==="
           sudo docker compose -f ~/ai-qa-engineer/docker-compose.yml logs --tail=300 ai-qa-api || true
+          echo "=== health ==="
           curl -i --max-time 10 http://localhost:8080/actuator/health || true
           REMOTE
+          rm -f "$DIAG_KEY"
 
       - name: Cleanup runner secrets
         if: always()
-        run: rm -f "$RUNNER_TEMP/ec2_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json /tmp/public-*.out /tmp/public-*.err
+        run: rm -f "$RUNNER_TEMP/ec2_key" "$RUNNER_TEMP/ec2_diag_key" /tmp/admin.cookies /tmp/admin-login.json /tmp/admin-me.json /tmp/public-*.out /tmp/public-*.err
