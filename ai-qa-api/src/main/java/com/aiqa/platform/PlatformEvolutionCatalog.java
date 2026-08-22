@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * M39-M60 platform evolution contracts. Capabilities remain explicit and auditable so
+ * M39-M70 platform evolution contracts. Capabilities remain explicit and auditable so
  * autonomous behavior can be enabled incrementally rather than hidden inside agents.
  *
  * @author Tejas Shah
@@ -34,7 +34,17 @@ public class PlatformEvolutionCatalog {
             new Milestone(57, "Flaky Root-Cause Intelligence", "QUALITY", List.of("transition analysis", "infra correlation", "quarantine recommendation")),
             new Milestone(58, "Failure Clustering", "QUALITY", List.of("signature normalization", "failure groups", "blast-radius triage")),
             new Milestone(59, "Feedback Learning", "ADAPTATION", List.of("bounded weight updates", "normalized explainability", "closed-loop tuning")),
-            new Milestone(60, "Mission Optimizer", "AUTONOMY", List.of("test budget optimization", "bounded specialist workforce", "risk-optimized execution"))
+            new Milestone(60, "Mission Optimizer", "AUTONOMY", List.of("test budget optimization", "bounded specialist workforce", "risk-optimized execution")),
+            new Milestone(61, "Release Dependency Graph", "INTELLIGENCE", List.of("component graph", "dependency traversal", "impact paths")),
+            new Milestone(62, "Change Blast Radius", "INTELLIGENCE", List.of("transitive impact", "severity", "focused regression scope")),
+            new Milestone(63, "Contract Testing Intelligence", "QUALITY", List.of("required-field compatibility", "version awareness", "breaking-change gate")),
+            new Milestone(64, "API Schema Drift", "QUALITY", List.of("expected-vs-actual schema", "type drift", "review severity")),
+            new Milestone(65, "Data Contract Drift", "DATA", List.of("field contract comparison", "missing/new keys", "compatibility signal")),
+            new Milestone(66, "Environment Readiness Score", "RELIABILITY", List.of("dependency health", "schema readiness", "secret/test-data readiness")),
+            new Milestone(67, "Test Selection Optimizer v2", "AUTONOMY", List.of("risk-per-minute scoring", "budget adherence", "critical-first selection")),
+            new Milestone(68, "Evidence Confidence", "QUALITY", List.of("assertion confidence", "screenshot/trace/video evidence", "confidence level")),
+            new Milestone(69, "Defect Deduplication", "QUALITY", List.of("normalized signatures", "component-aware grouping", "duplicate suppression")),
+            new Milestone(70, "Cross-Release Memory", "ADAPTATION", List.of("release history", "risk trend", "gate-tightening recommendation"))
     );
 
     public List<Milestone> milestones() { return MILESTONES; }
