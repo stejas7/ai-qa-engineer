@@ -1,5 +1,10 @@
 package com.aiqa.analytics;
 
+import com.aiqa.security.AppUser;
+import com.aiqa.security.AppUserRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.*;
@@ -8,30 +13,34 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Privacy-friendly product analytics for Auravis.
- * Stores anonymous browser/session identifiers and page paths only; raw IP addresses are not persisted.
- *
- * @author Tejas Shah
+ * Privacy-conscious product analytics.
+ * Public visits use anonymous browser identifiers. When an authenticated user is present, the persisted
+ * visit is associated with that application identity and tenant. Raw IP addresses, cookies and session IDs
+ * are never persisted or returned.
  */
 @RestController
 @RequestMapping("/api/analytics")
 public class SiteAnalyticsController {
     private final SiteVisitRepository visits;
+    private final AppUserRepository users;
 
-    public SiteAnalyticsController(SiteVisitRepository visits) {
+    public SiteAnalyticsController(SiteVisitRepository visits, AppUserRepository users) {
         this.visits = visits;
+        this.users = users;
     }
 
-    /** Records a React route/page view. */
+    /** Records a React route/page view and safely associates an existing authenticated identity when present. */
     @PostMapping("/visit")
-    public Map<String, Object> recordVisit(@RequestBody VisitRequest request) {
+    public Map<String, Object> recordVisit(@RequestBody VisitRequest request, Authentication authentication) {
         String path = normalizePath(request.path());
         String visitorId = normalizeVisitorId(request.visitorId());
-        visits.save(new SiteVisit(path, visitorId, Instant.now()));
+        AppUser user = authenticatedUser(authentication);
+        visits.save(new SiteVisit(path, visitorId, user == null ? null : user.getEmail(),
+                user == null ? null : user.getCompanyId(), Instant.now()));
         return Map.of("recorded", true);
     }
 
-    /** Returns aggregate traffic metrics used by the React Mission Dashboard. */
+    /** Returns aggregate traffic metrics for platform-owner visibility. */
     @GetMapping("/stats")
     public TrafficStats stats() {
         List<SiteVisit> all = visits.findAll();
@@ -39,32 +48,25 @@ public class SiteAnalyticsController {
         LocalDate today = LocalDate.now(zone);
         Instant todayStart = today.atStartOfDay(zone).toInstant();
         Instant sevenDayStart = today.minusDays(6).atStartOfDay(zone).toInstant();
+        Instant activeStart = Instant.now().minus(15, java.time.temporal.ChronoUnit.MINUTES);
 
         long total = all.size();
         long todayVisits = all.stream().filter(v -> !v.getVisitedAt().isBefore(todayStart)).count();
         long uniqueVisitors = all.stream().map(SiteVisit::getVisitorId).distinct().count();
-        long uniqueToday = all.stream()
-                .filter(v -> !v.getVisitedAt().isBefore(todayStart))
-                .map(SiteVisit::getVisitorId)
-                .distinct()
-                .count();
+        long uniqueToday = all.stream().filter(v -> !v.getVisitedAt().isBefore(todayStart))
+                .map(SiteVisit::getVisitorId).distinct().count();
+        long authenticatedVisitorsToday = all.stream().filter(v -> !v.getVisitedAt().isBefore(todayStart))
+                .map(SiteVisit::getUserEmail).filter(Objects::nonNull).distinct().count();
+        long activeAuthenticatedUsers = all.stream().filter(v -> !v.getVisitedAt().isBefore(activeStart))
+                .map(SiteVisit::getUserEmail).filter(Objects::nonNull).distinct().count();
 
-        Map<String, Long> pageCounts = all.stream()
-                .collect(Collectors.groupingBy(SiteVisit::getPath, Collectors.counting()));
-        String mostVisitedPage = pageCounts.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse("—");
-
-        List<PageVisit> topPages = pageCounts.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(10)
-                .map(e -> new PageVisit(e.getKey(), e.getValue()))
-                .toList();
+        Map<String, Long> pageCounts = all.stream().collect(Collectors.groupingBy(SiteVisit::getPath, Collectors.counting()));
+        String mostVisitedPage = pageCounts.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("—");
+        List<PageVisit> topPages = pageCounts.entrySet().stream().sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(10).map(e -> new PageVisit(e.getKey(), e.getValue())).toList();
 
         Map<LocalDate, Long> dailyCounts = visits.findAllByVisitedAtAfterOrderByVisitedAtAsc(sevenDayStart).stream()
                 .collect(Collectors.groupingBy(v -> v.getVisitedAt().atZone(zone).toLocalDate(), Collectors.counting()));
-
         List<DailyVisit> last7Days = new ArrayList<>();
         DateTimeFormatter labelFormat = DateTimeFormatter.ofPattern("EEE");
         for (int i = 6; i >= 0; i--) {
@@ -72,18 +74,28 @@ public class SiteAnalyticsController {
             last7Days.add(new DailyVisit(date.toString(), labelFormat.format(date), dailyCounts.getOrDefault(date, 0L)));
         }
 
-        return new TrafficStats(total, todayVisits, uniqueVisitors, uniqueToday, mostVisitedPage, last7Days, topPages);
+        return new TrafficStats(total, todayVisits, uniqueVisitors, uniqueToday, authenticatedVisitorsToday,
+                activeAuthenticatedUsers, mostVisitedPage, last7Days, topPages);
     }
 
-    /** Returns a small anonymous traffic trace for dashboard visibility. */
+    /** Returns the latest visits including authenticated identity when known. Platform-admin authorization is enforced by SecurityConfig. */
     @GetMapping("/recent")
     public List<RecentVisit> recent(@RequestParam(defaultValue = "20") int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 100));
-        return visits.findAll(org.springframework.data.domain.PageRequest.of(
-                        0, safeLimit, org.springframework.data.domain.Sort.by("visitedAt").descending()))
-                .stream()
-                .map(v -> new RecentVisit(v.getPath(), abbreviate(v.getVisitorId()), v.getVisitedAt()))
+        return visits.findAll(PageRequest.of(0, safeLimit, Sort.by("visitedAt").descending())).stream()
+                .map(v -> new RecentVisit(v.getPath(), identity(v), abbreviate(v.getVisitorId()),
+                        v.getCompanyId() == null ? null : v.getCompanyId().toString(), v.getVisitedAt()))
                 .toList();
+    }
+
+    private AppUser authenticatedUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName() == null
+                || "anonymousUser".equalsIgnoreCase(authentication.getName())) return null;
+        return users.findByEmailIgnoreCase(authentication.getName()).filter(AppUser::isActive).orElse(null);
+    }
+
+    private String identity(SiteVisit visit) {
+        return visit.getUserEmail() == null || visit.getUserEmail().isBlank() ? "Anonymous" : visit.getUserEmail();
     }
 
     private String normalizePath(String path) {
@@ -107,8 +119,9 @@ public class SiteAnalyticsController {
 
     public record VisitRequest(String path, String visitorId) {}
     public record TrafficStats(long totalVisits, long visitsToday, long uniqueVisitors, long uniqueVisitorsToday,
+                               long authenticatedVisitorsToday, long activeAuthenticatedUsers,
                                String mostVisitedPage, List<DailyVisit> last7Days, List<PageVisit> topPages) {}
     public record DailyVisit(String date, String label, long visits) {}
     public record PageVisit(String path, long visits) {}
-    public record RecentVisit(String path, String visitor, Instant visitedAt) {}
+    public record RecentVisit(String path, String identity, String visitor, String companyId, Instant visitedAt) {}
 }
