@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * M39-M80 platform evolution contracts. Capabilities remain explicit and auditable so
+ * M39-M90 platform evolution contracts. Capabilities remain explicit and auditable so
  * autonomous behavior can be enabled incrementally rather than hidden inside agents.
  *
  * @author Tejas Shah
@@ -54,7 +54,17 @@ public class PlatformEvolutionCatalog {
             new Milestone(77, "Device Matrix Planner", "QUALITY", List.of("browser/viewports", "bounded matrix", "cross-device coverage")),
             new Milestone(78, "Synthetic Persona Planner", "DATA", List.of("role personas", "boundary scenarios", "permission scenarios")),
             new Milestone(79, "Negative Path Generator", "QUALITY", List.of("required-field mutations", "boundary violations", "wrong-type cases")),
-            new Milestone(80, "Requirement Ambiguity Resolver", "INTELLIGENCE", List.of("vague-language signals", "condition detection", "expected-behavior detection"))
+            new Milestone(80, "Requirement Ambiguity Resolver", "INTELLIGENCE", List.of("vague-language signals", "condition detection", "expected-behavior detection")),
+            new Milestone(81, "Multi-Product Orchestration", "SCALE", List.of("portfolio ordering", "concurrency caps", "queued products")),
+            new Milestone(82, "Release Train Coordination", "RELEASE", List.of("release waves", "parallel caps", "target-date sequencing")),
+            new Milestone(83, "Tenant Capacity Forecasting", "SCALE", List.of("projected concurrency", "quota headroom", "capacity state")),
+            new Milestone(84, "Cost Forecasting", "FINOPS", List.of("agent-day variable cost", "fixed cost", "contingency forecast")),
+            new Milestone(85, "Workforce Capacity Forecast", "WORKFORCE", List.of("mission demand", "usable agents", "scale gap")),
+            new Milestone(86, "Agent Skill Routing", "WORKFORCE", List.of("required skills", "coverage scoring", "bounded specialist selection")),
+            new Milestone(87, "Agent Performance Scorecards", "WORKFORCE", List.of("success rate", "evidence quality", "SLA/rework score")),
+            new Milestone(88, "Agent Quality Calibration", "WORKFORCE", List.of("score mean", "target delta", "quality calibration")),
+            new Milestone(89, "Mission SLA Planning", "RELIABILITY", List.of("parallel execution estimate", "evidence time", "approval time")),
+            new Milestone(90, "Executive Release Portfolio", "GOVERNANCE", List.of("ready/blocked portfolio", "average risk", "executive attention state"))
     );
 
     public List<Milestone> milestones() { return MILESTONES; }
